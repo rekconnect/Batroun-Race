@@ -993,7 +993,32 @@ const db = getFirestore(app);
 // Event data — hardcoded as FALLBACK. Firestore overrides these
 // when /competitions/{id} and /categories/* docs exist.
 // ============================================================
-const COMPETITION_ID = "batroun-race-2026";
+// The ACTIVE competition (the one this public page registers people into)
+// comes from the /competitions/_app registry doc, set from the admin
+// dashboard. Cached in localStorage so repeat visits cost zero extra reads.
+// Falls back to the last shipped id if the registry doc doesn't exist yet.
+let COMPETITION_ID = "batroun-race-2026";
+const ACTIVE_COMP_CACHE_KEY = "br-active-comp-v1";
+const ACTIVE_COMP_CACHE_TTL_MS = 10 * 60 * 1000;
+try {
+  let cachedActive = null;
+  try {
+    const raw = JSON.parse(localStorage.getItem(ACTIVE_COMP_CACHE_KEY) || "null");
+    if (raw && raw.t && (Date.now() - raw.t) < ACTIVE_COMP_CACHE_TTL_MS && raw.id) cachedActive = raw.id;
+  } catch (_) {}
+  if (cachedActive) {
+    COMPETITION_ID = cachedActive;
+  } else {
+    const appSnap = await getDoc(doc(db, "competitions", "_app"));
+    if (appSnap.exists() && appSnap.data().activeId) COMPETITION_ID = appSnap.data().activeId;
+    try { localStorage.setItem(ACTIVE_COMP_CACHE_KEY, JSON.stringify({ t: Date.now(), id: COMPETITION_ID })); } catch (_) {}
+  }
+} catch (err) {
+  console.warn("Active competition lookup failed, using fallback:", err);
+}
+// Whish reference prefix — per competition (editable in admin → Competition),
+// falls back to BTN-<year> so each event's payments stay distinguishable.
+let REF_PREFIX = "BTN-2026";
 let RACE_DAY = "2026-11-22";
 
 let INCLUDES = [
@@ -1377,7 +1402,7 @@ function generateRef() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no confusing 0/O/1/I
   let s = "";
   for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return `BTN-2026-${s}`;
+  return `${REF_PREFIX}-${s}`;
 }
 
 // ============================================================
@@ -2305,7 +2330,7 @@ function setPayStep2(id, val, refSpanId) {
   const el = document.getElementById(id);
   if (!el) return;
   el.innerHTML = escHtml(val).replace(/\{ref\}/g,
-    `<span id="${refSpanId}" style="color:var(--accent);font-family:ui-monospace,Menlo,monospace">BTN-2026-XXXX</span>`);
+    `<span id="${refSpanId}" style="color:var(--accent);font-family:ui-monospace,Menlo,monospace">${REF_PREFIX}-XXXX</span>`);
 }
 
 function applyLogo(url, text, heightPx) {
@@ -2438,7 +2463,10 @@ async function fetchConfigData() {
       registrationCloses: c.registrationCloses?.toDate ? c.registrationCloses.toDate().toISOString()
                         : (typeof c.registrationCloses === "string" ? c.registrationCloses : null),
       raceDay: c.raceDay ? (typeof c.raceDay === "string" ? c.raceDay.slice(0,10)
-                          : c.raceDay.toDate().toISOString().slice(0,10)) : null
+                          : c.raceDay.toDate().toISOString().slice(0,10)) : null,
+      refPrefix: (typeof c.refPrefix === "string" && c.refPrefix.trim())
+                   ? c.refPrefix.trim().replace(/-+$/, "")
+                   : (c.year ? "BTN-" + c.year : null)
     };
   }
   // Categories — supports new schema (cat.price) and legacy (cat.prices.wave1)
@@ -2480,6 +2508,14 @@ function applyConfigData(data) {
   if (c.registrationOpens)  REGISTRATION_OPENS  = new Date(c.registrationOpens);
   if (c.registrationCloses) REGISTRATION_CLOSES = new Date(c.registrationCloses);
   if (c.raceDay)            RACE_DAY = c.raceDay;
+  if (c.refPrefix) {
+    REF_PREFIX = c.refPrefix;
+    // Refresh the static sample codes shown before a real ref exists.
+    const si = document.getElementById("siRef");
+    if (si) si.placeholder = REF_PREFIX + "-XXXX";
+    const ri = document.getElementById("refInline");
+    if (ri && /-XXXX$/.test(ri.textContent)) ri.textContent = REF_PREFIX + "-XXXX";
+  }
   if (data.categories)      CATEGORIES = data.categories;
   if (data.theme)           applyTheme(data.theme);
   if (Array.isArray(data.customFields)) CUSTOM_FIELDS = data.customFields;

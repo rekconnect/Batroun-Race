@@ -136,7 +136,10 @@ function isAllowed(email) {
       || dynamicViewers.includes(email)
       || dynamicScanners.includes(email);
 }
-const COMPETITION_ID = "batroun-race-2026";
+// Resolved below from the /competitions/_app registry (the ACTIVE
+// competition, i.e. the current event). A ?comp=<id> URL param overrides it
+// so an old event can still be scanned if ever needed.
+let COMPETITION_ID = "batroun-race-2026";
 
 // Fields the admin can choose to display on the result card.
 const SCANNER_FIELD_LABELS = {
@@ -165,6 +168,21 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 setPersistence(auth, browserLocalPersistence).catch(() => {});
+
+// Pick the competition: URL override first, else the registry's active one.
+{
+  const urlComp = new URLSearchParams(location.search).get("comp");
+  if (urlComp) {
+    COMPETITION_ID = urlComp;
+  } else {
+    try {
+      const appSnap = await getDoc(doc(db, "competitions", "_app"));
+      if (appSnap.exists() && appSnap.data().activeId) COMPETITION_ID = appSnap.data().activeId;
+    } catch (e) {
+      console.warn("Active competition lookup failed, using fallback:", e?.message);
+    }
+  }
+}
 
 // Watch the admin-defined scanner field config
 onSnapshot(
@@ -228,17 +246,27 @@ function evaluateAuth() {
   showScanner();
 }
 
-// Load access config (admins + viewers added via admin Settings tab)
+// Load access config (managed via admin Settings tab). The list is GLOBAL
+// (one team across all events) at /competitions/_app/config/access; the old
+// per-competition doc is kept as fallback until the admin dashboard runs
+// its one-time migration.
+const accessDocs = { app: null, legacy: null };
+function applyAccessDocs() {
+  const data = accessDocs.app || accessDocs.legacy || {};
+  dynamicAdmins   = (Array.isArray(data.admins)   ? data.admins   : []).map(e => String(e).toLowerCase());
+  dynamicViewers  = (Array.isArray(data.viewers)  ? data.viewers  : []).map(e => String(e).toLowerCase());
+  dynamicScanners = (Array.isArray(data.scanners) ? data.scanners : []).map(e => String(e).toLowerCase());
+  accessLoaded = true;
+  evaluateAuth();
+}
 onSnapshot(
-  doc(db, "competitions", COMPETITION_ID, "config", "access"),
-  snap => {
-    const data = snap.exists() ? snap.data() : {};
-    dynamicAdmins   = (Array.isArray(data.admins)   ? data.admins   : []).map(e => String(e).toLowerCase());
-    dynamicViewers  = (Array.isArray(data.viewers)  ? data.viewers  : []).map(e => String(e).toLowerCase());
-    dynamicScanners = (Array.isArray(data.scanners) ? data.scanners : []).map(e => String(e).toLowerCase());
-    accessLoaded = true;
-    evaluateAuth();
-  },
+  doc(db, "competitions", "_app", "config", "access"),
+  snap => { accessDocs.app = snap.exists() ? snap.data() : null; applyAccessDocs(); },
+  () => { accessLoaded = true; evaluateAuth(); }
+);
+onSnapshot(
+  doc(db, "competitions", "batroun-race-2026", "config", "access"),
+  snap => { accessDocs.legacy = snap.exists() ? snap.data() : null; applyAccessDocs(); },
   () => { accessLoaded = true; evaluateAuth(); }
 );
 

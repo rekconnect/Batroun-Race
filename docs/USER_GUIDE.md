@@ -119,6 +119,14 @@ You see all tabs in the admin nav:
 - **Permanent delete** — actually wipes from Firestore (frees the phone number)
 - **Restore all** / **Permanently delete all** at the top
 
+### Running a new race (keeping all the old data)
+Every event keeps its registrations, results, sponsors and expenses **forever** — nothing is deleted when you start a new one.
+
+- **See any event's data**: use the dropdown in the top bar of the admin. Pick an event and every tab shows that event's data. The one marked **● live** is what the public registration page uses.
+- **Create the next event**: Settings tab → **Competitions** → *New competition*. Give it a name (e.g. "Batroun Summer Race") and year. Leave *Copy setup* ticked to bring over the categories, theme and form setup — registrations start at zero. Then adjust dates and prices in the Competition/Categories tabs.
+- **Go live**: when you're ready to open registration for the new event, click **Make active** next to it. The public page and race-day scanner switch to it within ~10 minutes. The old event stays browsable in the dropdown forever.
+- **Results of past events**: the public results page gets a dropdown automatically once there's more than one event — visitors can look up any past edition that was published.
+
 ---
 
 ## 4. For admins — adding/removing user access (Settings tab)
