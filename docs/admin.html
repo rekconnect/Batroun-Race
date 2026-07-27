@@ -289,6 +289,8 @@
       <span id="brandLogoText">🏃 Batroun Race <span style="color:var(--accent)">Admin</span></span>
     </div>
     <div class="user">
+      <select id="compSwitcher" title="Competition — every event keeps its own data"
+              style="max-width:220px;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--ink);font:inherit;font-size:.85rem"></select>
       <span id="userEmail"></span>
       <button id="signOutBtn" class="signout">Sign out</button>
     </div>
@@ -1139,6 +1141,18 @@ See you at the start line!"></textarea>
           <div><label>Race start time</label><input id="cpStartTime" type="time" placeholder="e.g. 07:00"></div>
           <div><label>Race location</label><input id="cpLocation" placeholder="Batroun"></div>
         </div>
+        <div class="row two">
+          <div>
+            <label>Whish reference prefix</label>
+            <input id="cpRefPrefix" placeholder="BTN-2026" style="font-family:ui-monospace,Menlo,monospace">
+            <p class="muted" style="font-size:.8rem;margin:6px 0 0">
+              New registrations get codes like <code>PREFIX-A4K9</code>. Keep it
+              unique per event so payments are instantly tellable apart.
+              Blank = <code>BTN-&lt;year&gt;</code>.
+            </p>
+          </div>
+          <div></div>
+        </div>
       </div>
 
       <div><button id="competitionSaveBtn" class="btn">Save event info</button></div>
@@ -1204,6 +1218,39 @@ See you at the start line!"></textarea>
           Changes take effect immediately on the server (Firestore rules read
           this same list). The added user just needs to sign in.
         </p>
+      </div>
+
+      <div class="card admin-only">
+        <h2>Competitions</h2>
+        <p class="muted" style="margin:0 0 12px">
+          Every event keeps its own registrations, results, sponsors and expenses
+          <strong>forever</strong> — nothing is deleted when you add a new one.
+          Use the dropdown in the top bar to browse any event's data. The
+          <strong>active</strong> competition is the one the public registration
+          page and the race-day scanner point at.
+        </p>
+        <div id="compManagerList" style="margin-bottom:14px"></div>
+
+        <h3 style="margin:14px 0 6px;font-size:1rem;color:var(--accent)">New competition</h3>
+        <p class="muted" style="font-size:.85rem;margin:0 0 8px">
+          Starts with <strong>zero registrations</strong>. Optionally copies the
+          setup (categories, theme, form fields, form settings, scanner card) from
+          the competition you're viewing now, so you only adjust dates and prices.
+        </p>
+        <div class="row three">
+          <div><label>Event name</label><input id="ncName" placeholder="Batroun Summer Race"></div>
+          <div><label>Year</label><input id="ncYear" type="number" placeholder="2027"></div>
+          <div><label>ID (auto)</label><input id="ncId" placeholder="batroun-summer-race-2027"></div>
+        </div>
+        <label class="inline" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px">
+          <input type="checkbox" id="ncCopySetup" checked>
+          <span>Copy setup from the current competition</span>
+        </label>
+        <label class="inline" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px">
+          <input type="checkbox" id="ncMakeActive">
+          <span>Make it the <strong>active</strong> competition (public registration switches to it)</span>
+        </label>
+        <div style="margin-top:12px"><button id="ncCreateBtn" class="btn">Create competition</button></div>
       </div>
 
       <div class="card admin-only">
@@ -1383,7 +1430,6 @@ let userRole = "guest"; // 'admin' | 'viewer'
 let currentUserEmail = null;
 let pendingAuthUser = null;   // user object received before access config loaded
 let accessLoaded = false;
-const COMPETITION_ID = "batroun-race-2026";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1402,6 +1448,34 @@ try {
   console.warn("Persistent cache unavailable, falling back to default:", e?.message);
   db = getFirestore(app);
 }
+
+// ===== Competition selection =====
+// Every competition (year / event) keeps its full dataset under
+// /competitions/{id}. The registry doc /competitions/_app lists them all
+// plus which one is ACTIVE (the one the public page + scanner use). The
+// dashboard can browse ANY of them via the header dropdown; the choice is
+// per-browser (localStorage) and switching simply reloads the page so all
+// listeners re-subscribe against the selected competition.
+const LEGACY_COMPETITION_ID = "batroun-race-2026";
+const COMP_SELECT_KEY = "br-admin-competition";
+let compRegistry = { activeId: LEGACY_COMPETITION_ID, competitions: [] };
+try {
+  const appSnap = await getDoc(doc(db, "competitions", "_app"));
+  if (appSnap.exists()) {
+    const d = appSnap.data();
+    if (d.activeId) compRegistry.activeId = d.activeId;
+    if (Array.isArray(d.competitions)) compRegistry.competitions = d.competitions;
+  }
+} catch (e) {
+  console.warn("[registry] load failed (using legacy default):", e?.message);
+}
+const COMPETITION_ID = (() => {
+  const stored = localStorage.getItem(COMP_SELECT_KEY);
+  if (stored && (stored === compRegistry.activeId
+                 || stored === LEGACY_COMPETITION_ID
+                 || compRegistry.competitions.some(c => c.id === stored))) return stored;
+  return compRegistry.activeId || LEGACY_COMPETITION_ID;
+})();
 
 // State
 let regs = [];
@@ -1661,20 +1735,36 @@ function evaluateAuth() {
 
 // Subscribe to the access config. Admins manage this list in the
 // Settings tab; other devices/tabs pick up changes in real time.
+// The access doc is GLOBAL across competitions and lives at
+// /competitions/_app/config/access. Until the one-time migration has run
+// (see bootstrapRegistry) the old per-competition doc is used as fallback,
+// so nobody is locked out mid-transition.
+const accessDocs = { app: null, legacy: null };
+function applyAccessDocs() {
+  const data = accessDocs.app || accessDocs.legacy || {};
+  dynamicAdmins   = (Array.isArray(data.admins)   ? data.admins   : []).map(e => String(e).toLowerCase());
+  dynamicViewers  = (Array.isArray(data.viewers)  ? data.viewers  : []).map(e => String(e).toLowerCase());
+  dynamicScanners = (Array.isArray(data.scanners) ? data.scanners : []).map(e => String(e).toLowerCase());
+  accessLoaded = true;
+  renderAccessLists();
+  evaluateAuth();
+  maybeMigrateAccess();
+}
 onSnapshot(
-  doc(db, "competitions", COMPETITION_ID, "config", "access"),
-  snap => {
-    const data = snap.exists() ? snap.data() : {};
-    dynamicAdmins   = (Array.isArray(data.admins)   ? data.admins   : []).map(e => String(e).toLowerCase());
-    dynamicViewers  = (Array.isArray(data.viewers)  ? data.viewers  : []).map(e => String(e).toLowerCase());
-    dynamicScanners = (Array.isArray(data.scanners) ? data.scanners : []).map(e => String(e).toLowerCase());
+  doc(db, "competitions", "_app", "config", "access"),
+  snap => { accessDocs.app = snap.exists() ? snap.data() : null; applyAccessDocs(); },
+  err => {
+    console.warn("[access] global config listener:", err.message);
     accessLoaded = true;
-    renderAccessLists();
     evaluateAuth();
-  },
+  }
+);
+onSnapshot(
+  doc(db, "competitions", LEGACY_COMPETITION_ID, "config", "access"),
+  snap => { accessDocs.legacy = snap.exists() ? snap.data() : null; applyAccessDocs(); },
   err => {
     // Non-fatal — keep hardcoded super admins working
-    console.warn("[access] config listener:", err.message);
+    console.warn("[access] legacy config listener:", err.message);
     accessLoaded = true;
     evaluateAuth();
   }
@@ -1694,6 +1784,10 @@ function showApp(user) {
   applyPrefs();
   startListeners();
   hydratePrefsFromCloud();
+  renderCompSwitcher();
+  renderCompManager();
+  bootstrapRegistry();
+  maybeMigrateAccess();
 }
 
 function applyRoleVisibility() {
@@ -4201,7 +4295,7 @@ function renderAccessLists() {
 }
 
 async function writeAccess(payload) {
-  await setDoc(doc(db, "competitions", COMPETITION_ID, "config", "access"),
+  await setDoc(doc(db, "competitions", "_app", "config", "access"),
                { ...payload, updatedAt: serverTimestamp(), updatedBy: currentUserEmail || "unknown" },
                { merge: true });
 }
@@ -5112,7 +5206,8 @@ function buildTicketUrl(r) {
     amount:  (r.priceUSD ?? 0) ? `$${r.priceUSD}` : "Free",
     status:  r.paymentStatus || "",
     color:   cat?.bibColor || "",
-    teammate
+    teammate,
+    comp:    COMPETITION_ID
   });
   return `${TICKET_BASE_URL}?${params}`;
 }
@@ -5534,7 +5629,10 @@ function generateAdminRef() {
   const alpha = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let code = "";
   for (let i = 0; i < 4; i++) code += alpha[Math.floor(Math.random() * alpha.length)];
-  return "BTN-2026-" + code;
+  const prefix = (competition.refPrefix && String(competition.refPrefix).trim())
+    ? String(competition.refPrefix).trim().replace(/-+$/, "")
+    : "BTN-" + (competition.year || 2026);
+  return prefix + "-" + code;
 }
 
 function openParticipantEditor(r) {
@@ -7092,7 +7190,7 @@ $("#themeSaveBtn").addEventListener("click", async () => {
 let competitionDirty = false;
 
 function markCompetitionDirty() { competitionDirty = true; }
-["cpName","cpYear","cpOpens","cpCloses","cpRaceDay"].forEach(id => {
+["cpName","cpYear","cpOpens","cpCloses","cpRaceDay","cpStartTime","cpLocation","cpRefPrefix"].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener("input", markCompetitionDirty);
 });
@@ -7113,6 +7211,7 @@ function loadCompetitionIntoEditor(c) {
   $("#cpRaceDay").value = c.raceDay ? c.raceDay.slice(0,10) : "";
   $("#cpStartTime").value = c.raceStartTime || "";
   $("#cpLocation").value = c.raceLocation || "";
+  $("#cpRefPrefix").value = c.refPrefix || "";
 }
 
 function tsToLocal(ts) {
@@ -7136,7 +7235,8 @@ $("#competitionSaveBtn").addEventListener("click", async () => {
     registrationCloses: closes,
     raceDay: $("#cpRaceDay").value || null,
     raceStartTime: $("#cpStartTime").value || null,
-    raceLocation: $("#cpLocation").value.trim() || null
+    raceLocation: $("#cpLocation").value.trim() || null,
+    refPrefix: $("#cpRefPrefix").value.trim().replace(/-+$/, "") || null
   };
 
   console.log("[competition] saving:", {
@@ -7152,11 +7252,209 @@ $("#competitionSaveBtn").addEventListener("click", async () => {
     console.log("[competition] write OK");
     competitionDirty = false; // saved — let subsequent listener fires refresh the inputs
     toast("Event info saved");
+    // Keep the registry's name/year in sync so the switcher shows the new label.
+    try {
+      if (compRegistry.competitions.some(c => c.id === COMPETITION_ID)) {
+        compRegistry.competitions = compRegistry.competitions.map(c =>
+          c.id === COMPETITION_ID ? { ...c, name: payload.name || c.name, year: payload.year ?? c.year } : c);
+        await setDoc(doc(db, "competitions", "_app"), { competitions: compRegistry.competitions }, { merge: true });
+        renderCompSwitcher();
+        renderCompManager();
+      }
+    } catch (e2) { console.warn("[registry] label sync failed:", e2?.message); }
   } catch (e) {
     console.error("[competition] write failed:", e);
     toast(e.message, true);
   }
 });
+
+// ===== Competitions manager (multi-event registry) =====
+// The registry doc /competitions/_app is the single source of truth for the
+// list of events and which one is active. Browsing is per-browser via
+// localStorage; a switch reloads the page so every listener re-subscribes.
+
+function compDisplayLabel(c) {
+  const name = c.name || c.id;
+  const year = c.year && !String(name).includes(String(c.year)) ? " " + c.year : "";
+  return name + year;
+}
+
+function renderCompSwitcher() {
+  const sel = document.getElementById("compSwitcher");
+  if (!sel) return;
+  const list = [...compRegistry.competitions];
+  if (!list.some(c => c.id === COMPETITION_ID)) list.unshift({ id: COMPETITION_ID, name: COMPETITION_ID });
+  sel.innerHTML = list.map(c => {
+    const label = compDisplayLabel(c) + (c.id === compRegistry.activeId ? " ● live" : "");
+    return `<option value="${escapeHtml(c.id)}"${c.id === COMPETITION_ID ? " selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+document.getElementById("compSwitcher")?.addEventListener("change", e => {
+  localStorage.setItem(COMP_SELECT_KEY, e.target.value);
+  location.reload();
+});
+
+function renderCompManager() {
+  const box = document.getElementById("compManagerList");
+  if (!box) return;
+  const list = compRegistry.competitions.length
+    ? compRegistry.competitions
+    : [{ id: COMPETITION_ID, name: COMPETITION_ID, year: null }];
+  box.innerHTML = list.map(c => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+                padding:8px 12px;background:rgba(0,0,0,.18);border:1px solid var(--line);
+                border-radius:8px;margin-bottom:6px">
+      <span style="word-break:break-word">
+        <strong>${escapeHtml(compDisplayLabel(c))}</strong>
+        <span class="muted" style="font-size:.78rem">(${escapeHtml(c.id)})</span>
+        ${c.id === compRegistry.activeId ? ` <span style="color:var(--accent);font-size:.78rem;font-weight:700">● active — public page</span>` : ""}
+        ${c.id === COMPETITION_ID ? ` <span class="muted" style="font-size:.78rem">— viewing now</span>` : ""}
+      </span>
+      <span style="display:flex;gap:6px;flex-shrink:0">
+        ${c.id === COMPETITION_ID ? "" : `<button class="btn tiny sec" data-compview="${escapeHtml(c.id)}">View</button>`}
+        ${c.id === compRegistry.activeId ? "" : `<button class="btn tiny" data-compactivate="${escapeHtml(c.id)}">Make active</button>`}
+      </span>
+    </div>`).join("");
+  box.querySelectorAll("[data-compview]").forEach(b => b.onclick = () => {
+    localStorage.setItem(COMP_SELECT_KEY, b.dataset.compview);
+    location.reload();
+  });
+  box.querySelectorAll("[data-compactivate]").forEach(b => b.onclick = () => activateCompetition(b.dataset.compactivate));
+}
+
+async function activateCompetition(id) {
+  if (!confirm(
+    `Make "${id}" the ACTIVE competition?\n\n` +
+    `The public registration page and the race-day scanner switch to it. ` +
+    `Visitors may take up to ~10 minutes to see the change (cached config).`)) return;
+  try {
+    await setDoc(doc(db, "competitions", "_app"), { activeId: id }, { merge: true });
+    compRegistry.activeId = id;
+    renderCompSwitcher();
+    renderCompManager();
+    toast("Active competition updated");
+  } catch (e) { toast(e.message || "Failed", true); }
+}
+
+function compSlugify(s) {
+  return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function suggestCompId() {
+  const el = document.getElementById("ncId");
+  if (!el || el.dataset.touched === "1") return;
+  const name = document.getElementById("ncName").value;
+  const year = document.getElementById("ncYear").value.trim();
+  el.value = compSlugify(name + (year ? "-" + year : ""));
+}
+["ncName", "ncYear"].forEach(id => document.getElementById(id)?.addEventListener("input", suggestCompId));
+document.getElementById("ncId")?.addEventListener("input", e => { e.target.dataset.touched = "1"; });
+
+document.getElementById("ncCreateBtn")?.addEventListener("click", async () => {
+  const name = document.getElementById("ncName").value.trim();
+  const year = parseInt(document.getElementById("ncYear").value, 10) || null;
+  const id = compSlugify(document.getElementById("ncId").value);
+  if (!name) { toast("Enter an event name", true); return; }
+  if (!id || id === "_app") { toast("Enter a valid ID", true); return; }
+  if (id === COMPETITION_ID || compRegistry.competitions.some(c => c.id === id)) {
+    toast("A competition with this ID already exists", true); return;
+  }
+  const copySetup  = document.getElementById("ncCopySetup").checked;
+  const makeActive = document.getElementById("ncMakeActive").checked;
+  if (!confirm(
+    `Create competition "${name}"${year ? " " + year : ""} (${id})?\n\n` +
+    `It starts with ZERO registrations — all current data stays untouched under its own competition.` +
+    (copySetup ? `\nCategories, theme and form setup are copied from the competition you're viewing.` : "") +
+    (makeActive ? `\nIt becomes the ACTIVE competition — the public page switches to it.` : ""))) return;
+  const btn = document.getElementById("ncCreateBtn");
+  btn.disabled = true;
+  try {
+    await setDoc(doc(db, "competitions", id), {
+      name, year,
+      refPrefix: "BTN-" + (year || new Date().getFullYear()),
+      createdAt: serverTimestamp(),
+      createdBy: currentUserEmail || "unknown"
+    }, { merge: true });
+
+    if (copySetup) {
+      const batch = writeBatch(db);
+      const catsSnap = await getDocs(collection(db, "competitions", COMPETITION_ID, "categories"));
+      catsSnap.forEach(c => {
+        const x = { ...c.data(), registeredCount: 0 };
+        if (x.bibRangeStart != null) x.bibCursor = x.bibRangeStart; // fresh bib pool
+        batch.set(doc(db, "competitions", id, "categories", c.id), x);
+      });
+      for (const cfgId of ["theme", "form", "publicForm", "scanner"]) {
+        const s = await getDoc(doc(db, "competitions", COMPETITION_ID, "config", cfgId));
+        if (s.exists()) batch.set(doc(db, "competitions", id, "config", cfgId), s.data());
+      }
+      await batch.commit();
+    }
+
+    compRegistry.competitions = [...compRegistry.competitions, { id, name, year }];
+    if (makeActive) compRegistry.activeId = id;
+    await setDoc(doc(db, "competitions", "_app"),
+                 { activeId: compRegistry.activeId, competitions: compRegistry.competitions },
+                 { merge: true });
+
+    toast("Competition created — switching to it…");
+    localStorage.setItem(COMP_SELECT_KEY, id);
+    setTimeout(() => location.reload(), 900);
+  } catch (e) {
+    console.error("[competition create]", e);
+    toast(e.message || "Create failed", true);
+    btn.disabled = false;
+  }
+});
+
+// One-time bootstrap: make sure the registry doc exists and lists the
+// competition we're looking at (first run after this feature ships).
+let registryBootstrapped = false;
+async function bootstrapRegistry() {
+  if (registryBootstrapped || userRole !== "admin") return;
+  registryBootstrapped = true;
+  try {
+    if (!compRegistry.competitions.some(c => c.id === COMPETITION_ID)) {
+      const compSnap = await getDoc(doc(db, "competitions", COMPETITION_ID));
+      const c = compSnap.exists() ? compSnap.data() : {};
+      compRegistry.competitions = [...compRegistry.competitions,
+        { id: COMPETITION_ID, name: c.name || "Batroun Race", year: c.year || null }];
+      await setDoc(doc(db, "competitions", "_app"),
+                   { activeId: compRegistry.activeId || COMPETITION_ID, competitions: compRegistry.competitions },
+                   { merge: true });
+      renderCompSwitcher();
+      renderCompManager();
+      console.log("[registry] bootstrapped with", COMPETITION_ID);
+    }
+  } catch (e) { console.warn("[registry] bootstrap failed:", e?.message); }
+}
+
+// One-time move of the staff-access doc to its global home
+// (/competitions/_app/config/access) so one team covers every event. The
+// old per-competition doc is then emptied so the legacy fallback in the
+// security rules can't resurrect someone who was removed later.
+let accessMigrationStarted = false;
+async function maybeMigrateAccess() {
+  if (accessMigrationStarted || userRole !== "admin") return;
+  if (accessDocs.app || !accessDocs.legacy) return;       // already migrated / nothing to migrate
+  if (accessDocs.legacy.migratedTo) return;
+  accessMigrationStarted = true;
+  try {
+    const l = accessDocs.legacy;
+    await setDoc(doc(db, "competitions", "_app", "config", "access"), {
+      admins:   l.admins   || [],
+      viewers:  l.viewers  || [],
+      scanners: l.scanners || [],
+      migratedFrom: LEGACY_COMPETITION_ID,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUserEmail || "migration"
+    });
+    await setDoc(doc(db, "competitions", LEGACY_COMPETITION_ID, "config", "access"),
+                 { admins: [], viewers: [], scanners: [], migratedTo: "_app" });
+    console.log("[access] migrated to global doc");
+  } catch (e) { console.warn("[access] migration failed:", e?.message); }
+}
 
 </script>
 </body>

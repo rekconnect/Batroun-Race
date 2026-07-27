@@ -75,9 +75,11 @@
       <img id="brandLogo" alt="Batroun Race">
     </a>
     <div class="head-text">
-      <p class="brand">Batroun Race 2026</p>
+      <p class="brand" id="brandTitle">Batroun Race 2026</p>
       <h1>Results</h1>
     </div>
+    <select id="compSelect" aria-label="Choose event"
+            style="display:none;margin-left:auto;align-self:center;max-width:46vw;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;font:inherit;font-size:.85rem"></select>
   </header>
 
   <div class="card">
@@ -128,10 +130,62 @@ const firebaseConfig = {
   appId: "1:175612171118:web:96fc6e09ec599758f9277f"
 };
 const db = getFirestore(initializeApp(firebaseConfig));
-const COMPETITION_ID = "batroun-race-2026";
+
+// Which competition to show. Priority: ?comp= URL param → the ACTIVE
+// competition from the /competitions/_app registry → legacy default.
+// The registry is cached in localStorage so repeat visits cost no extra read.
+let COMPETITION_ID = "batroun-race-2026";
+let REGISTRY = { activeId: null, competitions: [] };
+{
+  const REG_CACHE_KEY = "br-results-registry-v1";
+  const REG_TTL_MS = 10 * 60 * 1000;
+  let reg = null;
+  try {
+    const o = JSON.parse(localStorage.getItem(REG_CACHE_KEY) || "null");
+    if (o && o.t && (Date.now() - o.t) < REG_TTL_MS) reg = o.data;
+  } catch (_) {}
+  if (!reg) {
+    try {
+      const snap = await getDoc(doc(db, "competitions", "_app"));
+      reg = snap.exists() ? {
+        activeId: snap.data().activeId || null,
+        competitions: Array.isArray(snap.data().competitions) ? snap.data().competitions : []
+      } : { activeId: null, competitions: [] };
+      try { localStorage.setItem(REG_CACHE_KEY, JSON.stringify({ t: Date.now(), data: reg })); } catch (_) {}
+    } catch (_) { reg = { activeId: null, competitions: [] }; }
+  }
+  REGISTRY = reg;
+  const urlComp = (new URLSearchParams(location.search).get("comp") || "").trim();
+  if (urlComp) COMPETITION_ID = urlComp;
+  else if (REGISTRY.activeId) COMPETITION_ID = REGISTRY.activeId;
+}
+const COMP_ENTRY = REGISTRY.competitions.find(c => c.id === COMPETITION_ID) || null;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// Header: show the selected event's name, and a switcher when the registry
+// lists more than one event (each keeps its published results forever).
+function compLabel(c){
+  const name = c.name || c.id;
+  return name + (c.year && !String(name).includes(String(c.year)) ? " " + c.year : "");
+}
+if (COMP_ENTRY) {
+  const t = $("#brandTitle");
+  if (t) t.textContent = compLabel(COMP_ENTRY);
+  document.title = compLabel(COMP_ENTRY) + " — Results";
+}
+if (REGISTRY.competitions.length > 1) {
+  const sel = $("#compSelect");
+  sel.innerHTML = REGISTRY.competitions.map(c =>
+    `<option value="${esc(c.id)}"${c.id === COMPETITION_ID ? " selected" : ""}>${esc(compLabel(c))}</option>`).join("");
+  sel.style.display = "";
+  sel.addEventListener("change", () => {
+    const u = new URL(location.href);
+    u.searchParams.set("comp", sel.value);
+    location.href = u.toString();
+  });
+}
 
 let ENTRIES = [], CATS = [];
 let SEL = { catId: "", gender: "", age: "" };  // gender "" = overall; age "" = all ages
@@ -139,7 +193,7 @@ let SORT = { key:"rank", dir:"asc" };
 
 // Reduce a bracket label to just its age range, e.g.
 // "Seniors Men-Women 20-34 (1992-2006)" -> "20-34"  ·  "Masters 70+ (…)" -> "70+"
-const RACE_YEAR = Number((COMPETITION_ID.match(/(\d{4})/) || [])[1]) || 0;
+const RACE_YEAR = Number(COMP_ENTRY?.year) || Number((COMPETITION_ID.match(/(\d{4})/) || [])[1]) || 0;
 function cleanAgeLabel(s){
   const str = String(s || "").trim();
   if (!str) return "";

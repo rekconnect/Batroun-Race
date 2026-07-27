@@ -207,7 +207,6 @@
 </main>
 
 <script>
-const COMPETITION_ID = "batroun-race-2026";
 const params = new URLSearchParams(location.search);
 const get = (k) => (params.get(k) || "").trim();
 
@@ -288,8 +287,11 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
-const COMPETITION_ID_LIVE = "batroun-race-2026";
 const params = new URLSearchParams(location.search);
+// Which competition this ticket belongs to. New ticket links carry a
+// comp=<id> param; links generated before multi-competition support are
+// all from the 2026 edition, hence the fallback.
+const COMPETITION_ID_LIVE = (params.get("comp") || "").trim() || "batroun-race-2026";
 const catId  = (params.get("cat_id") || "").trim();
 
 function applyTicketSponsor(elId, value) {

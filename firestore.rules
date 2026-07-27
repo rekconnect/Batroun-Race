@@ -16,15 +16,26 @@ service cloud.firestore {
         ];
     }
 
-    // Dynamic admin/viewer lists, managed via /config/access in the app.
+    // Dynamic admin/viewer lists, managed via Settings in the app. The
+    // access doc is GLOBAL (one team across all competitions/years) and
+    // lives at /competitions/_app/config/access. The old per-competition
+    // path (batroun-race-2026) is kept as a fallback so nobody is locked
+    // out while the app migrates the doc to the new location.
     function accessDoc() {
+      return get(/databases/$(database)/documents/competitions/_app/config/access).data;
+    }
+    function legacyAccessDoc() {
       return get(/databases/$(database)/documents/competitions/batroun-race-2026/config/access).data;
     }
     function inDynamicList(field) {
-      return exists(/databases/$(database)/documents/competitions/batroun-race-2026/config/access)
-          && request.auth != null
+      return request.auth != null
           && request.auth.token.email_verified == true
-          && request.auth.token.email in accessDoc().get(field, []);
+          && (
+               (exists(/databases/$(database)/documents/competitions/_app/config/access)
+                 && request.auth.token.email in accessDoc().get(field, []))
+            || (exists(/databases/$(database)/documents/competitions/batroun-race-2026/config/access)
+                 && request.auth.token.email in legacyAccessDoc().get(field, []))
+          );
     }
 
     function isAdmin()  { return isSuperAdmin() || inDynamicList('admins'); }

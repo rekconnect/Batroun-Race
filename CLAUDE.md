@@ -4,7 +4,9 @@ Project context for Claude Code. This file is auto-read on every session. **Keep
 
 ## What this is
 
-A complete registration system for the **Batroun Race** annual running event in Lebanon (Batroun). Public registration page + admin dashboard + race-day QR scanner. Built reusable each year — never hardcode "2026" anywhere; always use `competitionId` (e.g. `batroun-race-2026`). One deliberate exception: the Whish reference code format (see Critical conventions).
+A complete registration system for the **Batroun Race** annual running event in Lebanon (Batroun). Public registration page + admin dashboard + race-day QR scanner. Built reusable each year — never hardcode "2026" anywhere; always use `competitionId` (e.g. `batroun-race-2026`).
+
+**Multi-competition**: the app supports many events (per year / per event name), all kept forever under their own `competitions/{id}`. The registry doc `/competitions/_app` lists them (`competitions: [{id,name,year}]`) plus which one is **active** (`activeId`) — the active one is what the public registration page and race-day scanner use. Admins browse any event via a header dropdown (per-browser, localStorage `br-admin-competition`, switch = page reload) and create/activate events from Settings → Competitions (with optional copy of categories/theme/form/scanner config; bib cursors and counters reset). The public results page has its own event dropdown (`?comp=` deep link). String literals `"batroun-race-2026"` that remain in code are deliberate **legacy fallbacks** (pre-registry links/docs), not the current-event id.
 
 ## Tech stack (locked — don't change without asking)
 
@@ -66,13 +68,21 @@ GitHub Pages.
 | **Scanner-only** | `/config/access.scanners` array | `scan.html` only — scan + mark BIB received. No admin dashboard, no registration list/stats. |
 | **Public** | No auth | Just the registration page |
 
-`firestore.rules` `isAdmin()` checks super-admin list OR `/config/access.admins`. `isViewer()` checks `/config/access.viewers`. `isScanner()` checks `/config/access.scanners` (may only `get` a registration by known ref and update the check-in fields — no `list`, no dashboard). Rules read the access doc via `get()`.
+`firestore.rules` `isAdmin()` checks super-admin list OR `access.admins`. `isViewer()` checks `access.viewers`. `isScanner()` checks `access.scanners` (may only `get` a registration by known ref and update the check-in fields — no `list`, no dashboard). Rules read the access doc via `get()`.
+
+**The access doc is GLOBAL** (one team across all events): `/competitions/_app/config/access`. Rules also fall back to the legacy `/competitions/batroun-race-2026/config/access`; the admin dashboard auto-migrates the legacy doc to `_app` on first admin visit and then empties the legacy one (so removals can't be resurrected by the fallback).
 
 ## Firestore data model
 
 ```
+competitions/_app                               // multi-event registry (public read, admin write)
+  ├─ activeId                                   // the event the public page + scanner use
+  ├─ competitions: [{ id, name, year }]
+  └─ config/access: { admins[], viewers[], scanners[] }   // GLOBAL staff list (authenticated read)
+
 competitions/{competitionId}                    // "batroun-race-2026"
   ├─ name, year, registrationOpens, registrationCloses, raceDay, raceStartTime, raceLocation
+  ├─ refPrefix                                  // Whish ref prefix, e.g. "BTN-2026" — editable in admin Competition tab; blank → BTN-<year>
 
 competitions/{competitionId}/categories/{categoryId}
   ├─ name, distanceKm, timed
@@ -118,8 +128,8 @@ Each new registration's Firestore document ID **is** its `whishReference` (e.g. 
 - The public **sign-in flow** (`index.html` → "Already registered? Sign in") looks up a registration via `getDoc(refs/<ref>)`. Firestore rules allow public `get` on `/registrations/{regId}` for this exact pattern; `list` is still locked to admin/viewer so we don't leak the whole table. The client verifies that the stored `phone` (normalised) matches what the user typed before exposing the doc's contents.
 
 ### Whish reference codes
-- Format: `BTN-2026-XXXX` (4 chars, no confusing 0/O/1/I/L)
-- **Deliberate exception to the "no hardcoded year" rule** — keeping the year in the ref code lets admins instantly tell a current-year payment apart from a stale one from a prior edition. When rolling over to the next race, bump the literal in `docs/index.html` (search `BTN-2026-`) alongside the `competitionId`.
+- Format: `<refPrefix>-XXXX`, e.g. `BTN-2026-A4K9` (4 chars, no confusing 0/O/1/I/L)
+- The prefix is **per-competition**: `refPrefix` on the competition doc (admin → Competition tab), defaulting to `BTN-<year>`. Keeping the year/event in the prefix lets admins instantly tell a current payment apart from a stale one from a prior edition. No code edit needed at rollover any more — the old hardcoded `BTN-2026-` literals are gone (only harmless static placeholders remain in HTML, replaced at runtime).
 - Generated client-side at submit time
 - Shown prominently on the confirmation panel
 - Runner must include in Whish note/comment — admin matches manually
@@ -236,6 +246,7 @@ If multiple commits land in one session, keep updating the same PR rather than o
 - ✅ Race-day scanner (scan.html) with camera + manual fallback + admin-customizable result card fields + check-in tracking
 - ✅ Two-tier access: super admins hardcoded, additional admins + staff dynamic via Firestore
 - ✅ Codespaces devcontainer for cloud development
+- ✅ Multi-competition support: `/competitions/_app` registry, admin header dropdown to browse any event, Settings → Competitions to create (with copy-setup) and set the active event, per-competition Whish `refPrefix`, global staff-access doc, public results event dropdown, `comp=` param on ticket/scanner links
 
 ## Open ideas (not yet built)
 
