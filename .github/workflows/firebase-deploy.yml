@@ -16,7 +16,7 @@ jobs:
   deploy:
     name: firebase deploy
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.repository == 'Relkady84/Batroun-Race'
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'rekconnect/Batroun-Race'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
           if [ -z "$FIREBASE_TOKEN" ]; then
             echo "::error::FIREBASE_TOKEN repo secret is not set."
             echo "Run 'firebase login:ci' on any desktop, then add the printed token to"
-            echo "https://github.com/Relkady84/Batroun-Race/settings/secrets/actions"
+            echo "https://github.com/rekconnect/Batroun-Race/settings/secrets/actions"
             echo "as FIREBASE_TOKEN."
             exit 1
           fi
