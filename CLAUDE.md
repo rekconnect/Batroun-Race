@@ -242,7 +242,7 @@ If multiple commits land in one session, keep updating the same PR rather than o
   - Settings tab: add/remove additional admins + staff
 - ✅ Soft delete + 10s undo toast (stacked, multiple simultaneous undos work)
 - ✅ Payment approval flow → auto-opens pre-composed WhatsApp message with ticket link
-- ✅ Public ticket page (ticket.html) with client-side QR
+- ✅ Public ticket page (ticket.html) with client-side QR; tickets auto-expire 14 days after race day (greyed out, QR removed, and the live Firestore fetch is skipped so expired links cost zero reads)
 - ✅ Race-day scanner (scan.html) with camera + manual fallback + admin-customizable result card fields + check-in tracking
 - ✅ Two-tier access: super admins hardcoded, additional admins + staff dynamic via Firestore
 - ✅ Codespaces devcontainer for cloud development
