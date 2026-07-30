@@ -804,7 +804,7 @@ Masters Men-Women 35-39 (1987-1991)
         <div class="row two" style="margin-top:14px">
           <div>
             <label>Text next to logo (optional, public page)</label>
-            <input id="thLogoText" placeholder="e.g. Batroun Race 2026">
+            <input id="thLogoText" placeholder="e.g. your event name">
           </div>
           <div>
             <label>Logo height (px, 40–200)</label>
@@ -1008,7 +1008,7 @@ See you at the start line!"></textarea>
           <div style="border:1px solid var(--line);border-radius:14px;padding:18px;background:rgba(4,14,28,.6);max-width:520px">
             <h3 id="confirmPreviewHeading" style="color:var(--accent);margin:0 0 10px;font-size:1.15rem;font-weight:900;line-height:1.3">&#10003; Application received</h3>
             <p id="confirmPreviewMessage" style="margin:0 0 12px;line-height:1.6;color:var(--ink);white-space:pre-line"></p>
-            <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1.4rem;font-weight:900;letter-spacing:2px;color:var(--accent);text-align:center;padding:12px;background:rgba(0,0,0,.25);border-radius:12px;border:1px dashed rgba(61,214,198,.5)">BTN-2026-A4K9</div>
+            <div id="confirmPreviewRef" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1.4rem;font-weight:900;letter-spacing:2px;color:var(--accent);text-align:center;padding:12px;background:rgba(0,0,0,.25);border-radius:12px;border:1px dashed rgba(61,214,198,.5)">BTN-2026-A4K9</div>
             <div class="muted" style="font-size:.75rem;text-align:center;margin-top:6px">the reference code fills in automatically for each applicant</div>
           </div>
         </div>
@@ -1101,7 +1101,7 @@ See you at the start line!"></textarea>
                           background:#3dd6c6;border:2px solid #fff;border-radius:50%;
                           cursor:nwse-resize;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>
             </div>
-            <p style="font-weight:900;font-size:.74rem;letter-spacing:.22em;text-transform:uppercase;color:#3dd6c6;margin:0 0 4px">Batroun Race 2026</p>
+            <p id="thTicketPreviewBrand" style="font-weight:900;font-size:.74rem;letter-spacing:.22em;text-transform:uppercase;color:#3dd6c6;margin:0 0 4px">Batroun Race</p>
             <h1 style="margin:0;font-size:1.25rem;font-weight:900;color:#fff">Official Race Ticket</h1>
             <p style="color:#a9c5dd;margin:6px 0 0;font-size:.85rem">Present this ticket on race day</p>
           </div>
@@ -1131,7 +1131,7 @@ See you at the start line!"></textarea>
       <div class="card">
         <h2>Event info</h2>
         <div class="row two">
-          <div><label>Name</label><input id="cpName" placeholder="Batroun Race 2026"></div>
+          <div><label>Name</label><input id="cpName" placeholder="e.g. Tannourine"></div>
           <div><label>Year</label><input id="cpYear" type="number"></div>
         </div>
         <div class="row three">
@@ -7207,6 +7207,7 @@ function markCompetitionDirty() { competitionDirty = true; }
 });
 
 function loadCompetitionIntoEditor(c) {
+  refreshEventNameSamples(c); // display-only, safe to refresh even mid-edit
   if (competitionDirty) {
     console.log("[competition] skipping reload — user is editing (dirty)");
     return;
@@ -7223,6 +7224,22 @@ function loadCompetitionIntoEditor(c) {
   $("#cpStartTime").value = c.raceStartTime || "";
   $("#cpLocation").value = c.raceLocation || "";
   $("#cpRefPrefix").value = c.refPrefix || "";
+}
+
+// Theme-tab samples that display the CURRENT event: the ticket preview's
+// header brand and the confirmation-preview reference code. Purely visual —
+// the real values are resolved at ticket-render / submit time.
+function refreshEventNameSamples(c) {
+  const brand = document.getElementById("thTicketPreviewBrand");
+  if (brand && c.name) {
+    brand.textContent = c.name + (c.year && !String(c.name).includes(String(c.year)) ? " " + c.year : "");
+  }
+  const refBox = document.getElementById("confirmPreviewRef");
+  if (refBox) {
+    const prefix = (c.refPrefix && String(c.refPrefix).trim().replace(/-+$/, ""))
+      || (c.year ? "BTN-" + c.year : "BTN-2026");
+    refBox.textContent = prefix + "-A4K9";
+  }
 }
 
 function tsToLocal(ts) {
