@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta content="width=device-width,initial-scale=1" name="viewport">
-<title>Register — Batroun Race 2026</title>
+<title>Register — Batroun Race</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
@@ -507,7 +507,7 @@
 
     <!-- Registration closed view -->
     <div class="closed-banner" id="closedBanner" style="display:none">
-      Registration for Batroun Race 2026 is now closed. See you next year!
+      Registration is now closed. See you next year!
     </div>
     <!-- Shown only while registration is actively open, to communicate
          the window (so visitors know the deadline). Filled in by
@@ -1019,6 +1019,9 @@ try {
 // Whish reference prefix — per competition (editable in admin → Competition),
 // falls back to BTN-<year> so each event's payments stay distinguishable.
 let REF_PREFIX = "BTN-2026";
+// Event name from the competition doc — used in the page title and the
+// "registration closed" banner.
+let COMPETITION_NAME = "Batroun Race";
 let RACE_DAY = "2026-11-22";
 
 let INCLUDES = [
@@ -1450,7 +1453,7 @@ function renderRegistrationBanner() {
       `Registration opens on <strong>${fmtDate(REGISTRATION_OPENS)}</strong>. Come back then to sign up.`;
   } else {
     closedBanner.textContent =
-      "Registration for Batroun Race 2026 is now closed. See you next year!";
+      `Registration for ${COMPETITION_NAME} is now closed. See you next year!`;
   }
 }
 renderRegistrationBanner();
@@ -2466,7 +2469,10 @@ async function fetchConfigData() {
                           : c.raceDay.toDate().toISOString().slice(0,10)) : null,
       refPrefix: (typeof c.refPrefix === "string" && c.refPrefix.trim())
                    ? c.refPrefix.trim().replace(/-+$/, "")
-                   : (c.year ? "BTN-" + c.year : null)
+                   : (c.year ? "BTN-" + c.year : null),
+      name: (typeof c.name === "string" && c.name.trim())
+              ? c.name.trim() + (c.year && !c.name.includes(String(c.year)) ? " " + c.year : "")
+              : null
     };
   }
   // Categories — supports new schema (cat.price) and legacy (cat.prices.wave1)
@@ -2508,6 +2514,10 @@ function applyConfigData(data) {
   if (c.registrationOpens)  REGISTRATION_OPENS  = new Date(c.registrationOpens);
   if (c.registrationCloses) REGISTRATION_CLOSES = new Date(c.registrationCloses);
   if (c.raceDay)            RACE_DAY = c.raceDay;
+  if (c.name) {
+    COMPETITION_NAME = c.name;
+    document.title = "Register — " + c.name;
+  }
   if (c.refPrefix) {
     REF_PREFIX = c.refPrefix;
     // Refresh the static sample codes shown before a real ref exists.

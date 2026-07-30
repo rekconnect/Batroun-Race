@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#08172b">
-<title>Race Ticket — Batroun Race 2026</title>
+<title>Race Ticket — Batroun Race</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap">
@@ -157,7 +157,7 @@
     <div class="ticket-header">
       <img class="ticket-sponsor left"  id="sponsorLeft"  alt="" hidden>
       <img class="ticket-sponsor right" id="sponsorRight" alt="" hidden>
-      <p class="brand">Batroun Race 2026</p>
+      <p class="brand" id="compBrand">Batroun Race</p>
       <h1 class="ticket-title">Official Race Ticket</h1>
       <p class="ticket-sub" id="subName">Present this ticket on race day</p>
     </div>
@@ -200,8 +200,7 @@
          loads. The IIFE below overrides this with theme.bibPickupText
          when the admin has customised it. -->
     <div class="pickup">
-      <span class="pickup-inner" id="pickupSchedule">- 6 July 2026: Experts Sport, Dbayyeh
-- 8 July 2026: Batroun</span>
+      <span class="pickup-inner" id="pickupSchedule">Bib pickup details will be announced before race day.</span>
     </div>
   </article>
 </main>
@@ -329,7 +328,7 @@ function applyTicketSponsor(elId, value) {
 // Firestore every time — the URL params already render instantly, this is
 // only the live-override refresh. Stored NORMALISED (plain strings, no
 // Firestore Timestamps) so it survives JSON round-tripping.
-const TICKET_CACHE_KEY = "br-ticket-" + COMPETITION_ID_LIVE + "-" + (catId || "none") + "-v1";
+const TICKET_CACHE_KEY = "br-ticket-" + COMPETITION_ID_LIVE + "-" + (catId || "none") + "-v2";
 const TICKET_CACHE_TTL_MS = 10 * 60 * 1000;
 function readTicketCache() {
   try {
@@ -357,6 +356,9 @@ function writeTicketCache(data) {
       b = {
         raceDay: typeof c.raceDay === "string" ? c.raceDay.slice(0,10)
                : (c.raceDay?.toDate ? c.raceDay.toDate().toISOString().slice(0,10) : null),
+        compName: (typeof c.name === "string" && c.name.trim())
+                    ? c.name.trim() + (c.year && !c.name.includes(String(c.year)) ? " " + c.year : "")
+                    : null,
         raceStartTime: c.raceStartTime || null,
         raceLocation:  c.raceLocation  || null,
         catStartTime:  cat.startTime    || null,
@@ -367,6 +369,10 @@ function writeTicketCache(data) {
         ticketRightLogo: theme.ticketRightLogo || null
       };
       writeTicketCache(b);
+    }
+    if (b.compName) {
+      const brand = document.getElementById("compBrand");
+      if (brand) brand.textContent = b.compName;
     }
     if (b.raceDay) window.renderDate(b.raceDay);
     const liveStart = b.catStartTime || b.raceStartTime || null;
