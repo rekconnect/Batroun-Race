@@ -39,6 +39,9 @@ A step-by-step guide for everyone who interacts with the registration system: ru
    - A link to your **race ticket** (with a QR code)
    - Show this ticket at the pickup desk on race day
 
+### Ticket expiry
+A race ticket (and its QR code) stays valid until **two weeks after race day**. After that the ticket page shows "This ticket has expired" and the QR disappears — old links can't be mistaken for a current ticket.
+
 ### One phone number = one registration
 You cannot register twice with the same phone number. If you try, you'll get a clear "already registered" message.
 

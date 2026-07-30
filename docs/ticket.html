@@ -188,7 +188,7 @@
 
       <div class="stub">
         <div><strong>Status:</strong> <span id="status">Confirmed</span></div>
-        <div>Batroun Race · <span id="year"></span></div>
+        <div><span id="stubBrand">Batroun Race</span> · <span id="year"></span></div>
       </div>
     </div>
 
@@ -268,6 +268,53 @@ if (status) {
 if (name) document.getElementById("subName").textContent = name + " — show this at pickup";
 
 document.title = name ? `Race Ticket — ${name}` : "Race Ticket — Batroun Race";
+
+// ===== Ticket expiry =====
+// A ticket (and its QR) stays valid until 14 days after race day; after
+// that it renders as EXPIRED — greyed out, QR removed. Checked twice: now
+// with the race day from the URL, and again when the live Firestore fetch
+// returns the authoritative race day (in case the admin moved the date).
+const TICKET_VALID_DAYS_AFTER_RACE = 14;
+
+function markTicketExpired(expiredOn) {
+  if (window.__ticketExpired) return;
+  window.__ticketExpired = true;
+  const ticket = document.getElementById("ticket");
+  if (ticket) {
+    const banner = document.createElement("div");
+    banner.textContent = "This ticket has expired";
+    banner.style.cssText =
+      "background:#8a1f2d;color:#fff;font-weight:900;text-align:center;" +
+      "padding:12px 14px;letter-spacing:.08em;text-transform:uppercase;" +
+      "border-radius:12px;margin:0 auto 14px;max-width:520px";
+    ticket.parentNode.insertBefore(banner, ticket);
+    ticket.style.filter = "grayscale(1)";
+    ticket.style.opacity = ".75";
+  }
+  const qr = document.getElementById("qr");
+  if (qr) {
+    qr.innerHTML =
+      `<div style="display:flex;align-items:center;justify-content:center;` +
+      `text-align:center;font-weight:900;color:#8a1f2d;padding:18px;` +
+      `min-height:120px;text-transform:uppercase;letter-spacing:.06em">` +
+      `Expired<br>on ${expiredOn.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</div>`;
+  }
+  const sub = document.getElementById("subName");
+  if (sub) sub.textContent = "This ticket is no longer valid";
+  const st = document.getElementById("status");
+  if (st) st.textContent = "Expired";
+}
+
+function ticketExpiryCheck(raceDayStr) {
+  if (window.__ticketExpired || !raceDayStr) return;
+  const d = new Date(raceDayStr);
+  if (isNaN(d)) return;
+  const expiry = new Date(d.getTime() + TICKET_VALID_DAYS_AFTER_RACE * 24 * 60 * 60 * 1000);
+  expiry.setHours(23, 59, 59, 999); // valid through the end of the 14th day
+  if (new Date() > expiry) markTicketExpired(expiry);
+}
+window.ticketExpiryCheck = ticketExpiryCheck;
+ticketExpiryCheck(date);
 </script>
 <!-- Live override: if the admin updated raceDay / raceStartTime / raceLocation
      or the category's startTime / bibColor after this ticket URL was generated,
@@ -328,7 +375,7 @@ function applyTicketSponsor(elId, value) {
 // Firestore every time — the URL params already render instantly, this is
 // only the live-override refresh. Stored NORMALISED (plain strings, no
 // Firestore Timestamps) so it survives JSON round-tripping.
-const TICKET_CACHE_KEY = "br-ticket-" + COMPETITION_ID_LIVE + "-" + (catId || "none") + "-v2";
+const TICKET_CACHE_KEY = "br-ticket-" + COMPETITION_ID_LIVE + "-" + (catId || "none") + "-v3";
 const TICKET_CACHE_TTL_MS = 10 * 60 * 1000;
 function readTicketCache() {
   try {
@@ -343,6 +390,12 @@ function writeTicketCache(data) {
 
 (async () => {
   try {
+    // Expired ticket (14+ days after race day, judged from the URL's race
+    // date) → skip the live Firestore fetch entirely. Old ticket links then
+    // cost ZERO reads, which matters on the free Spark quota. Live postpone
+    // edge case: if a race day ever moves, resend fresh ticket links (they
+    // are regenerated from the dashboard anyway).
+    if (window.__ticketExpired) return;
     let b = readTicketCache();
     if (!b) {
       const [compSnap, catSnap, themeSnap] = await Promise.all([
@@ -359,6 +412,7 @@ function writeTicketCache(data) {
         compName: (typeof c.name === "string" && c.name.trim())
                     ? c.name.trim() + (c.year && !c.name.includes(String(c.year)) ? " " + c.year : "")
                     : null,
+        compNameRaw: (typeof c.name === "string" && c.name.trim()) ? c.name.trim() : null,
         raceStartTime: c.raceStartTime || null,
         raceLocation:  c.raceLocation  || null,
         catStartTime:  cat.startTime    || null,
@@ -374,7 +428,13 @@ function writeTicketCache(data) {
       const brand = document.getElementById("compBrand");
       if (brand) brand.textContent = b.compName;
     }
+    if (b.compNameRaw) {
+      const stub = document.getElementById("stubBrand");
+      if (stub) stub.textContent = b.compNameRaw;
+    }
     if (b.raceDay) window.renderDate(b.raceDay);
+    // Authoritative expiry check with the live race day (14 days after race).
+    if (b.raceDay && window.ticketExpiryCheck) window.ticketExpiryCheck(b.raceDay);
     const liveStart = b.catStartTime || b.raceStartTime || null;
     if (liveStart) window.renderStart(liveStart);
     if (b.raceLocation) window.renderLoc(b.raceLocation);
@@ -406,12 +466,15 @@ function writeTicketCache(data) {
 <script>
   // qrcodejs renders at a fixed pixel size. Pick a size based on the
   // viewport so the QR is crisp on phones without being huge on desktop.
-  const qrPx = Math.min(220, Math.max(180, Math.floor(window.innerWidth * 0.55)));
-  new QRCode(document.getElementById("qr"), {
-    text: (new URLSearchParams(location.search)).get("ref") || "BATROUN-RACE",
-    width: qrPx, height: qrPx, correctLevel: QRCode.CorrectLevel.M,
-    colorDark: "#000000", colorLight: "#ffffff"
-  });
+  // Skipped entirely when the ticket has expired (14 days after race day).
+  if (!window.__ticketExpired) {
+    const qrPx = Math.min(220, Math.max(180, Math.floor(window.innerWidth * 0.55)));
+    new QRCode(document.getElementById("qr"), {
+      text: (new URLSearchParams(location.search)).get("ref") || "BATROUN-RACE",
+      width: qrPx, height: qrPx, correctLevel: QRCode.CorrectLevel.M,
+      colorDark: "#000000", colorLight: "#ffffff"
+    });
+  }
 </script>
 </body>
 </html>
