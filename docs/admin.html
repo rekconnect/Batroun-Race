@@ -915,10 +915,11 @@ Masters Men-Women 35-39 (1987-1991)
           substitute the live value:
           <code>{name}</code> (runner's first name),
           <code>{ref}</code> (reference code),
-          <code>{link}</code> (their live invoice / payment link).
+          <code>{link}</code> (their live invoice / payment link),
+          <code>{event}</code> (this event's name).
         </p>
         <label>Custom first message — leave blank for the default</label>
-        <textarea id="thPendingWa" rows="7" placeholder="Hi {name}, thank you for registering for Batroun Race 2026!
+        <textarea id="thPendingWa" rows="7" placeholder="Hi {name}, thank you for registering for {event}!
 To secure your spot, please complete your payment at your earliest convenience:
 {link}
 Reference: {ref}
@@ -940,10 +941,11 @@ Your bib and QR ticket are sent the moment we receive the payment."></textarea>
           <code>{category}</code> (category),
           <code>{amount}</code> (amount paid or "Entry: Free"),
           <code>{ticket}</code> (their race-ticket link),
-          <code>{pickup}</code> (the bib-pickup block you set below).
+          <code>{pickup}</code> (the bib-pickup block you set below),
+          <code>{event}</code> (this event's name).
         </p>
         <label>Custom confirmation message — leave blank for the default</label>
-        <textarea id="thConfirmedWa" rows="10" placeholder="Hi {name}, your Batroun Race 2026 registration is confirmed!
+        <textarea id="thConfirmedWa" rows="10" placeholder="Hi {name}, your {event} registration is confirmed!
 
 Status: PAYMENT RECEIVED
 Reference: {ref}
@@ -5220,7 +5222,7 @@ function buildTicketUrl(r) {
 // them here (not inline in the builders) means the editor and the sent
 // message can never drift.
 const DEFAULT_PENDING_MSG =
-  `Hi {name}, thank you for registering for Batroun Race 2026!\n` +
+  `Hi {name}, thank you for registering for {event}!\n` +
   `To secure your spot, please complete your payment at your earliest convenience:\n` +
   `{link}\n` +
   `Reference: {ref}\n` +
@@ -5228,7 +5230,7 @@ const DEFAULT_PENDING_MSG =
   `Your bib and QR ticket are sent the moment we receive the payment.`;
 
 const DEFAULT_CONFIRMED_MSG =
-  `Hi {name}, your Batroun Race 2026 registration is confirmed!\n\n` +
+  `Hi {name}, your {event} registration is confirmed!\n\n` +
   `Status: PAYMENT RECEIVED\n` +
   `Reference: {ref}\n` +
   `Bib number: {bib}\n` +
@@ -5298,8 +5300,16 @@ const DEFAULT_PAY_CLOSING_AR =
 // supports {name} (runner first name), {ref} (reference code), and {link}
 // (the live invoice URL). When blank, the built-in default below is used.
 // ===== Message text (shared by the WhatsApp + Email senders) =====
+// Current event's display name — used by the {event} placeholder and the
+// email subjects, so messages never carry a stale hardcoded edition.
+function currentEventLabel() {
+  const n = (competition.name || "").trim() || "Batroun Race";
+  return competition.year && !n.includes(String(competition.year))
+    ? n + " " + competition.year : n;
+}
+
 // Pre-payment / "first" message: greeting + live invoice link. Placeholders
-// {name}/{ref}/{link} resolved. Same text whether sent via WhatsApp or email.
+// {name}/{ref}/{link}/{event} resolved. Same text whether sent via WhatsApp or email.
 function pendingMessageText(r) {
   const ref = r.whishReference || r.id || "";
   // Custom domain — see TICKET_BASE_URL note above.
@@ -5307,9 +5317,10 @@ function pendingMessageText(r) {
   const template = (theme && theme.pendingWaText && theme.pendingWaText.trim())
     || DEFAULT_PENDING_MSG;
   return template
-    .replace(/\{name\}/g, r.firstName || "")
-    .replace(/\{ref\}/g,  ref)
-    .replace(/\{link\}/g, invoiceUrl);
+    .replace(/\{name\}/g,  r.firstName || "")
+    .replace(/\{ref\}/g,   ref)
+    .replace(/\{link\}/g,  invoiceUrl)
+    .replace(/\{event\}/g, currentEventLabel());
 }
 
 // Post-payment / "second" message: confirmation + bib + ticket link.
@@ -5322,8 +5333,7 @@ function confirmedMessageText(r) {
   // sensible default when blank.
   const DEFAULT_BIB_PICKUP =
     `BIB PICKUP — bring your ticket (printed or on your phone):\n` +
-    `- 6 July 2026: Experts Sport, Dbayyeh\n` +
-    `- 8 July 2026: Batroun`;
+    `Details will be announced before race day.`;
   const bibPickupBlock = (theme && theme.bibPickupText && theme.bibPickupText.trim())
     || DEFAULT_BIB_PICKUP;
 
@@ -5340,7 +5350,8 @@ function confirmedMessageText(r) {
     .replace(/\{category\}/g, catText)
     .replace(/\{amount\}/g,   amountText)
     .replace(/\{ticket\}/g,   ticketUrl)
-    .replace(/\{pickup\}/g,   bibPickupBlock);
+    .replace(/\{pickup\}/g,   bibPickupBlock)
+    .replace(/\{event\}/g,    currentEventLabel());
 }
 
 function buildPendingWhatsAppUrl(r) {
@@ -5366,8 +5377,8 @@ function emailPartsFor(r, kind) {
   const to = String(r.email || "").trim();
   if (!to) return null;
   const subject = kind === "pending"
-    ? "Batroun Race 2026 — Registration received, payment needed"
-    : "Batroun Race 2026 — Registration confirmed, your race ticket";
+    ? `${currentEventLabel()} — Registration received, payment needed`
+    : `${currentEventLabel()} — Registration confirmed, your race ticket`;
   const body = kind === "pending" ? pendingMessageText(r) : confirmedMessageText(r);
   return { to, subject, body };
 }
