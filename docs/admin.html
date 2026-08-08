@@ -853,7 +853,13 @@ Masters Men-Women 35-39 (1987-1991)
 
       <div class="card">
         <h2>Copy</h2>
-        <div><label>Page heading</label><input id="thHeading" placeholder="Register for Batroun Race"></div>
+        <p class="muted" style="margin:0 0 12px">
+          Tip: type <code>{event}</code> anywhere in these texts and the public
+          page substitutes this event's name automatically (e.g.
+          "Register for {event}" &rarr; "Register for Highland Tannourine Trail 2026")
+          &mdash; so the wording survives renames and new events untouched.
+        </p>
+        <div><label>Page heading</label><input id="thHeading" placeholder="Register for {event}"></div>
         <div><label>Subtitle (under the heading)</label><input id="thSubtitle" placeholder="Coastal course • pro timing • …"></div>
         <div><label>Top banner text (centered banner near the top — leave blank to hide)</label>
           <textarea id="thBanner" rows="2" placeholder="e.g. Early bird ends June 30 — register now!"></textarea>
@@ -6660,8 +6666,9 @@ function loadThemeIntoEditor(t) {
 function updateConfirmPreview() {
   const h = $("#thConfirmHeading").value.trim() || DEFAULT_CONFIRM_HEADING;
   const m = $("#thConfirmMessage").value.trim() || DEFAULT_CONFIRM_MESSAGE;
-  $("#confirmPreviewHeading").textContent = h;
-  $("#confirmPreviewMessage").textContent = m;
+  // Preview with {event} resolved, exactly like the public page renders it.
+  $("#confirmPreviewHeading").textContent = h.split("{event}").join(currentEventLabel());
+  $("#confirmPreviewMessage").textContent = m.split("{event}").join(currentEventLabel());
 }
 $("#thConfirmHeading").addEventListener("input", updateConfirmPreview);
 $("#thConfirmMessage").addEventListener("input", updateConfirmPreview);
@@ -7240,6 +7247,9 @@ function refreshEventNameSamples(c) {
       || (c.year ? "BTN-" + c.year : "BTN-2026");
     refBox.textContent = prefix + "-A4K9";
   }
+  // Re-render the confirmation preview so its {event} tokens pick up the
+  // (possibly just-loaded) competition name.
+  try { updateConfirmPreview(); } catch (_) {}
 }
 
 function tsToLocal(ts) {

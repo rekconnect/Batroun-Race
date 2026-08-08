@@ -2527,7 +2527,18 @@ function applyConfigData(data) {
     if (ri && /-XXXX$/.test(ri.textContent)) ri.textContent = REF_PREFIX + "-XXXX";
   }
   if (data.categories)      CATEGORIES = data.categories;
-  if (data.theme)           applyTheme(data.theme);
+  if (data.theme) {
+    // Resolve the {event} placeholder in any theme text (heading, subtitle,
+    // banner, payment copy, logo text, ...) to this event's display name —
+    // so per-event wording like "Register for {event}" never needs editing
+    // at rollover. Image data-URLs and texts without the token pass through.
+    const themed = {};
+    for (const [k, v] of Object.entries(data.theme)) {
+      themed[k] = (typeof v === "string" && v.includes("{event}"))
+        ? v.split("{event}").join(COMPETITION_NAME) : v;
+    }
+    applyTheme(themed);
+  }
   if (Array.isArray(data.customFields)) CUSTOM_FIELDS = data.customFields;
   if (data.publicForm) {
     applyPublicFormConfig(data.publicForm.builtIn || {});
