@@ -448,7 +448,8 @@ function writeTicketCache(data) {
     // Bib pickup schedule — sourced from the same theme.bibPickupText the
     // post-payment WhatsApp message uses. The static HTML shows the default;
     // this only overrides when the admin has typed a custom block.
-    const customPickup = (b.bibPickupText || "").trim();
+    const customPickup = (b.bibPickupText || "").trim()
+      .split("{event}").join(b.compName || "the race");
     if (customPickup) {
       const el = document.getElementById("pickupSchedule");
       if (el) el.textContent = customPickup;
