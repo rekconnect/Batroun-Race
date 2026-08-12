@@ -2226,16 +2226,26 @@ function renderCustomFields() {
     const id = "cf_" + f.key;
     const price = Number(f.price) || 0;
     const priceTag = price > 0
-      ? ` <span style="color:var(--accent);font-weight:700">(${f.type === "number" ? `$${price} each` : `+$${price}`})</span>`
+      ? ` <span style="color:var(--accent);font-weight:700">(${f.type === "checkbox" ? `+$${price}` : `$${price} each`})</span>`
       : "";
     const safeLabel = escHtml(f.label) + priceTag;
     let control = "";
     if (f.type === "textarea") {
       control = `<textarea id="${id}" name="${id}" rows="3" ${req}></textarea>`;
     } else if (f.type === "checkbox") {
+      // A PRICED checkbox reveals a quantity input when ticked, so one
+      // registration can book several (e.g. 3 bus seats). The quantity
+      // question's wording comes from the field's first "option" if the
+      // admin set one (the Options box is unused for checkboxes), else a
+      // generic default. Charge = price × quantity.
+      const qtyBlock = price > 0 ? `
+        <div id="${id}_qtywrap" hidden style="margin:8px 0 0 28px">
+          <label for="${id}_qty" style="font-size:.9rem">${escHtml((f.options && f.options[0]) || "How many?")} <span class="muted">($${price} each)</span></label>
+          <input type="number" id="${id}_qty" min="1" step="1" value="1" inputmode="numeric" style="max-width:110px">
+        </div>` : "";
       return `<div class="row"><label class="inline">
         <input type="checkbox" id="${id}" name="${id}" ${req}>
-        <span>${safeLabel}${reqStar}</span></label></div>`;
+        <span>${safeLabel}${reqStar}</span></label>${qtyBlock}</div>`;
     } else if (f.type === "select") {
       const opts = '<option value="">Select…</option>' +
         (f.options || []).map(o => `<option>${String(o).replace(/</g,"&lt;")}</option>`).join("");
@@ -2249,10 +2259,23 @@ function renderCustomFields() {
   }).join("");
 
   card.style.display = "";
-  // Priced add-ons refresh the price display live as they're (un)ticked.
+  // Priced add-ons refresh the price display live as they're (un)ticked;
+  // priced checkboxes also show/hide their quantity input.
   CUSTOM_FIELDS.filter(f => (Number(f.price) || 0) > 0).forEach(f => {
     const el = document.getElementById("cf_" + f.key);
-    if (el) el.addEventListener(f.type === "checkbox" ? "change" : "input", refreshPriceDisplay);
+    if (!el) return;
+    if (f.type === "checkbox") {
+      const wrap = document.getElementById("cf_" + f.key + "_qtywrap");
+      const qty  = document.getElementById("cf_" + f.key + "_qty");
+      el.addEventListener("change", () => {
+        if (wrap) wrap.hidden = !el.checked;
+        if (el.checked && qty && !(parseInt(qty.value, 10) > 0)) qty.value = "1";
+        refreshPriceDisplay();
+      });
+      if (qty) qty.addEventListener("input", refreshPriceDisplay);
+    } else {
+      el.addEventListener("input", refreshPriceDisplay);
+    }
   });
   // Re-run validation setup so the new fields get error spans + clear-on-input
   initFieldErrors();
@@ -2263,9 +2286,17 @@ function collectCustomValues() {
   for (const f of CUSTOM_FIELDS) {
     const el = document.getElementById("cf_" + f.key);
     if (!el) continue;
-    out[f.key] = el.type === "checkbox" ? !!el.checked
-              : el.value === "" ? null
-              : (f.type === "number" ? (parseFloat(el.value) || null) : el.value.trim());
+    if (el.type === "checkbox") {
+      // Priced checkbox with quantity → store the booked quantity (a number)
+      // so the admin sees how many; plain checkbox stays a boolean.
+      const qtyEl = document.getElementById("cf_" + f.key + "_qty");
+      out[f.key] = el.checked
+        ? (qtyEl ? Math.max(1, parseInt(qtyEl.value, 10) || 1) : true)
+        : false;
+    } else {
+      out[f.key] = el.value === "" ? null
+                : (f.type === "number" ? (parseFloat(el.value) || null) : el.value.trim());
+    }
   }
   return out;
 }
@@ -2284,7 +2315,11 @@ function customAddOnItems() {
     const el = document.getElementById("cf_" + f.key);
     if (!el) continue;
     if (f.type === "checkbox") {
-      if (el.checked) items.push({ key: f.key, label: f.label, qty: 1, amount: p });
+      if (el.checked) {
+        const qtyEl = document.getElementById("cf_" + f.key + "_qty");
+        const q = Math.max(1, parseInt(qtyEl?.value, 10) || 1);
+        items.push({ key: f.key, label: f.label, qty: q, amount: Math.round(p * q * 100) / 100 });
+      }
     } else if (f.type === "number") {
       const q = Math.max(0, parseFloat(el.value) || 0);
       if (q > 0) items.push({ key: f.key, label: f.label, qty: q, amount: Math.round(p * q * 100) / 100 });
