@@ -1485,6 +1485,17 @@ function populateCategorySelect() {
       return `<option value="${escHtml(id)}">${escHtml(c.name)}${ageStr}${freeStr}</option>`;
     }).join("");
   if (current && CATEGORIES[current]) sel.value = current;
+
+  // Single-category event: nothing to choose — auto-select it and hide the
+  // dropdown row entirely. The price card + sub-question render as usual.
+  const row = sel.closest(".row");
+  if (entries.length === 1) {
+    sel.value = entries[0][0];
+    if (row) row.style.display = "none";
+  } else if (row) {
+    row.style.display = "";
+  }
+
   sel.dispatchEvent(new Event("change"));
 }
 
@@ -2000,11 +2011,17 @@ function renderExtraParticipants(count) {
   });
 
   // Wire per-participant category + DOB changes → recompute total + sub-question.
+  const catIds = Object.keys(CATEGORIES);
   for (let n = 2; n <= count; n++) {
     const catEl = document.getElementById(`p${n}_cat`);
     const dobEl = document.getElementById(`p${n}_dob`);
     if (catEl) catEl.addEventListener("change", () => { recomputeMultiTotal(); renderParticipantSubQ(n); });
     if (dobEl) dobEl.addEventListener("change", () => renderParticipantSubQ(n));
+    // Single-category event: preselect it here too (the main dropdown is hidden).
+    if (catEl && !catEl.value && catIds.length === 1) {
+      catEl.value = catIds[0];
+      catEl.dispatchEvent(new Event("change"));
+    }
     renderParticipantSubQ(n);
   }
 
