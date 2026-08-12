@@ -782,7 +782,11 @@ Masters Men-Women 35-39 (1987-1991)
           </div>
           <div></div>
         </div>
-        <div style="margin-top:12px"><button id="ffAddBtn" class="btn">Add field</button></div>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+          <button id="ffAddBtn" class="btn">Add field</button>
+          <button id="ffCancelEditBtn" class="btn sec" hidden>Cancel edit</button>
+          <span id="ffEditNote" class="muted" style="font-size:.85rem" hidden></span>
+        </div>
       </div>
 
       <div class="card">
@@ -6586,14 +6590,57 @@ function renderFormFields() {
           <span class="muted"> · ${escapeHtml(f.type)}${f.required?" · required":""}${(Number(f.price)||0) > 0 ? ` · <span style="color:var(--accent)">+$${f.price}${f.type === "number" ? " each" : ""}</span>` : ""}</span>
           <div class="muted" style="font-size:.85rem">key: <code>${escapeHtml(f.key)}</code>${f.options?` · options: ${escapeHtml(f.options.join(", "))}`:""}</div>
         </div>
-        <button class="btn tiny danger" data-i="${i}">Remove</button>
+        <span style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn tiny sec" data-edit="${i}">Edit</button>
+          <button class="btn tiny danger" data-i="${i}">Remove</button>
+        </span>
       </div>
     </div>
   `).join("");
   list.querySelectorAll('button[data-i]').forEach(b => {
     b.addEventListener("click", () => removeFormField(parseInt(b.dataset.i, 10)));
   });
+  list.querySelectorAll('button[data-edit]').forEach(b => {
+    b.addEventListener("click", () => startEditFormField(parseInt(b.dataset.edit, 10)));
+  });
 }
+
+// ----- Edit an existing custom field in place -----
+// The KEY stays locked: it's the identifier the collected answers are stored
+// under in every registration's `custom` map — changing it would orphan them.
+let ffEditIndex = null;
+
+function startEditFormField(i) {
+  const f = formFields[i];
+  if (!f) return;
+  ffEditIndex = i;
+  $("#ffKey").value = f.key;
+  $("#ffKey").disabled = true;
+  $("#ffLabel").value = f.label || "";
+  $("#ffType").value = f.type || "text";
+  $("#ffReq").value = f.required ? "true" : "false";
+  $("#ffOpts").value = Array.isArray(f.options) ? f.options.join(", ") : "";
+  $("#ffPrice").value = (Number(f.price) || 0) > 0 ? f.price : "";
+  $("#ffAddBtn").textContent = "Save changes";
+  $("#ffCancelEditBtn").hidden = false;
+  const note = $("#ffEditNote");
+  note.hidden = false;
+  note.textContent = `Editing "${f.label}" — the key is locked.`;
+  $("#ffLabel").focus();
+}
+
+function resetFormFieldEditor() {
+  ffEditIndex = null;
+  $("#ffKey").disabled = false;
+  ["ffKey","ffLabel","ffOpts","ffPrice"].forEach(id => $("#"+id).value = "");
+  $("#ffType").value = "text";
+  $("#ffReq").value = "false";
+  $("#ffAddBtn").textContent = "Add field";
+  $("#ffCancelEditBtn").hidden = true;
+  $("#ffEditNote").hidden = true;
+}
+
+$("#ffCancelEditBtn").addEventListener("click", resetFormFieldEditor);
 
 $("#ffSectionSaveBtn").addEventListener("click", async () => {
   try {
@@ -6607,6 +6654,7 @@ $("#ffSectionSaveBtn").addEventListener("click", async () => {
 });
 
 $("#ffAddBtn").addEventListener("click", async () => {
+  const editing = ffEditIndex !== null;
   const key = $("#ffKey").value.trim();
   const label = $("#ffLabel").value.trim();
   const type = $("#ffType").value;
@@ -6614,7 +6662,9 @@ $("#ffAddBtn").addEventListener("click", async () => {
   const opts = $("#ffOpts").value.split(",").map(s => s.trim()).filter(Boolean);
   if (!key || !label) { toast("Key and label required", true); return; }
   if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(key)) { toast("Key: letters/digits/underscore only, must start with letter", true); return; }
-  if (formFields.some(f => f.key === key)) { toast("That key is already used", true); return; }
+  if (formFields.some((f, idx) => f.key === key && !(editing && idx === ffEditIndex))) {
+    toast("That key is already used", true); return;
+  }
   if (type === "select" && opts.length === 0) { toast("Dropdowns need at least one option", true); return; }
   const price = parseFloat($("#ffPrice").value) || 0;
   if (price < 0) { toast("Extra charge can't be negative", true); return; }
@@ -6628,19 +6678,28 @@ $("#ffAddBtn").addEventListener("click", async () => {
   if (type === "select" || (type === "checkbox" && price > 0 && opts.length)) newField.options = opts;
   if (price > 0) newField.price = price;
 
+  // Editing: replace in place so the field keeps its position on the form.
+  const nextFields = editing
+    ? formFields.map((f, idx) => idx === ffEditIndex ? newField : f)
+    : [...formFields, newField];
+
+  if (editing && formFields[ffEditIndex].type !== type
+      && !confirm(`Change the field type from "${formFields[ffEditIndex].type}" to "${type}"?\n\nAnswers already collected keep their old format.`)) return;
+
   try {
     await setDoc(
       doc(db, "competitions", COMPETITION_ID, "config", "form"),
-      { fields: [...formFields, newField] },
+      { fields: nextFields },
       { merge: true }
     );
-    ["ffKey","ffLabel","ffOpts","ffPrice"].forEach(id => $("#"+id).value = "");
-    toast("Field added");
+    resetFormFieldEditor();
+    toast(editing ? "Field updated" : "Field added");
   } catch (e) { toast(e.message, true); }
 });
 
 async function removeFormField(i) {
   if (!confirm(`Remove field "${formFields[i].label}"?`)) return;
+  if (ffEditIndex !== null) resetFormFieldEditor(); // indices shift after removal
   const next = formFields.slice();
   next.splice(i, 1);
   try {
