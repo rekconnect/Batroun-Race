@@ -763,10 +763,13 @@ Masters Men-Women 35-39 (1987-1991)
             <label>Extra charge in USD — optional</label>
             <input id="ffPrice" type="number" min="0" step="0.5" placeholder="e.g. 5">
             <p class="muted" style="font-size:.8rem;margin:6px 0 0">
-              Adds to the registration total. <strong>Checkbox</strong> = flat charge when
-              ticked (e.g. "Bus from Batroun to Tannourine" +$5). <strong>Number</strong> =
-              charge × quantity (e.g. "Bus seats" at $5 each). On group registrations the
-              whole add-on lands on Person&nbsp;1's amount.
+              Adds to the registration total. <strong>Checkbox</strong>: ticking it reveals a
+              "How many?" quantity box (default 1) and charges price × quantity — e.g.
+              "Bus from Batroun to Tannourine" at $5, family books 3 seats → $15. Type a
+              custom quantity question (e.g. <em>How many bus seats?</em>) in the
+              <strong>Options</strong> box above. <strong>Number</strong> field = plain
+              quantity × price. On group registrations the whole add-on lands on
+              Person&nbsp;1's amount.
             </p>
           </div>
           <div></div>
@@ -6596,7 +6599,9 @@ $("#ffAddBtn").addEventListener("click", async () => {
   }
 
   const newField = { key, label, type, required };
-  if (type === "select") newField.options = opts;
+  // Options: dropdown choices — or, for a PRICED checkbox, the custom
+  // wording of its "How many?" quantity question (first entry).
+  if (type === "select" || (type === "checkbox" && price > 0 && opts.length)) newField.options = opts;
   if (price > 0) newField.price = price;
 
   try {
