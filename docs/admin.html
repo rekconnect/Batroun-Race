@@ -739,6 +739,14 @@ Masters Men-Women 35-39 (1987-1991)
       <div class="card">
         <h2>Add custom field</h2>
         <p class="muted" style="margin:0 0 10px">These fields appear on the public registration form, below the built-in fields.</p>
+        <div class="row two" style="margin-bottom:14px">
+          <div>
+            <label>Section title on the public form</label>
+            <input id="ffSectionTitle" placeholder="Race extras">
+            <p class="muted" style="font-size:.8rem;margin:6px 0 0">Heading of the card these fields live in. Blank = "Additional info".</p>
+          </div>
+          <div style="align-self:end"><button id="ffSectionSaveBtn" class="btn sec">Save title</button></div>
+        </div>
         <div class="row two">
           <div><label>Field key (no spaces, e.g. <code>tshirtColor</code>)</label><input id="ffKey"></div>
           <div><label>Label (what users see)</label><input id="ffLabel" placeholder="T-shirt color"></div>
@@ -1938,6 +1946,11 @@ function startListeners() {
     snap => {
       formFields = snap.exists() ? (snap.data().fields || []) : [];
       renderFormFields();
+      // Section title — don't clobber the input while the admin is typing.
+      const stEl = document.getElementById("ffSectionTitle");
+      if (stEl && document.activeElement !== stEl) {
+        stEl.value = (snap.exists() && snap.data().sectionTitle) || "";
+      }
     },
     err => toast("Form-fields listener: " + err.message, true)
   );
@@ -6581,6 +6594,17 @@ function renderFormFields() {
     b.addEventListener("click", () => removeFormField(parseInt(b.dataset.i, 10)));
   });
 }
+
+$("#ffSectionSaveBtn").addEventListener("click", async () => {
+  try {
+    await setDoc(
+      doc(db, "competitions", COMPETITION_ID, "config", "form"),
+      { sectionTitle: $("#ffSectionTitle").value.trim() || null },
+      { merge: true }
+    );
+    toast("Section title saved");
+  } catch (e) { toast(e.message, true); }
+});
 
 $("#ffAddBtn").addEventListener("click", async () => {
   const key = $("#ffKey").value.trim();
