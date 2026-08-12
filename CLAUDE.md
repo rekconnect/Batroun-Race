@@ -98,7 +98,7 @@ competitions/{competitionId}/categories/{categoryId}
 
 competitions/{competitionId}/config/{configId}   // public read except /access
   ├─ theme:      { accent, accent2, ink, bg1, bg2, bgImage, logoImage, logoText, logoHeight, whishLogo, whishNumber, whishRecipient, whishConfirmText, whishInvoiceText, heading, subtitle, bannerText }
-  ├─ form:       { fields: [{ key, label, type, required, options, price }] }   // extra public-form fields; price (optional, USD) makes a checkbox a flat-charge add-on or a number field a per-unit charge (e.g. bus seat $5) — added to priceUSD, Person 1 carries the group's add-ons
+  ├─ form:       { fields: [{ key, label, type, required, options, price }], sectionTitle }   // extra public-form fields; price (optional, USD) makes a checkbox a flat-charge add-on (reveals a qty input; options[0] = qty question wording) or a number field a per-unit charge — added to priceUSD, Person 1 carries the group's add-ons. sectionTitle renames the public card (default "Additional info")
   ├─ publicForm: { builtIn: { <key>: { visible, required, label, deleted } }, includes: [string] }   // toggles + label overrides for built-in fields (email, gender, nationality, country, city, tshirt, blood, club, note, emergency) and the "Registration includes" list shown on the price card
   ├─ scanner:    { fields: [...] }    // which fields the hostess scanner shows
   └─ access:     { admins: [email], viewers: [email], scanners: [email] }   // authenticated read only

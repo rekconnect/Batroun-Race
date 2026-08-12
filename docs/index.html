@@ -744,7 +744,7 @@
 
       <!-- Custom fields (rendered from Firestore /config/form) -->
       <div class="card" id="customFieldsCard" style="display:none">
-        <h3 class="title">Additional info</h3>
+        <h3 class="title" id="customFieldsTitle">Additional info</h3>
         <div id="customFieldsContainer"></div>
       </div>
 
@@ -2590,6 +2590,7 @@ async function fetchConfigData() {
   if (themeSnap.exists()) data.theme = themeSnap.data();
   const formSnap = await getDoc(doc(db, "competitions", COMPETITION_ID, "config", "form"));
   if (formSnap.exists() && Array.isArray(formSnap.data().fields)) data.customFields = formSnap.data().fields;
+  if (formSnap.exists() && formSnap.data().sectionTitle) data.customFieldsTitle = formSnap.data().sectionTitle;
   const pfSnap = await getDoc(doc(db, "competitions", COMPETITION_ID, "config", "publicForm"));
   if (pfSnap.exists()) data.publicForm = { builtIn: pfSnap.data().builtIn || {}, includes: pfSnap.data().includes || [] };
   return data;
@@ -2628,6 +2629,10 @@ function applyConfigData(data) {
     applyTheme(themed);
   }
   if (Array.isArray(data.customFields)) CUSTOM_FIELDS = data.customFields;
+  if (data.customFieldsTitle) {
+    const t = document.getElementById("customFieldsTitle");
+    if (t) t.textContent = data.customFieldsTitle;
+  }
   if (data.publicForm) {
     applyPublicFormConfig(data.publicForm.builtIn || {});
     if (Array.isArray(data.publicForm.includes) && data.publicForm.includes.length) INCLUDES = data.publicForm.includes;
