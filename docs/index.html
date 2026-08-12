@@ -1821,6 +1821,19 @@ catSelect.addEventListener("change", () => {
     : `Untimed · ${formatAgeRange(cat.ageLimit, cat.ageLimitMax) ? "Age " + formatAgeRange(cat.ageLimit, cat.ageLimitMax) : "All ages"}`;
   priceLadder.innerHTML = "";
 
+  // Priced add-ons (e.g. bus seat) — shown as a breakdown under the total.
+  const addOnItems = customAddOnItems();
+  const addOnTotal = addOnItems.reduce((s, i) => s + i.amount, 0);
+  if (addOnTotal > 0) {
+    const grand = price + addOnTotal;
+    priceBig.innerHTML = `$${grand} USD`;
+    priceLadder.innerHTML =
+      `<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span>Registration</span><span>${price === 0 ? "Free" : "$" + price}</span></div>` +
+      addOnItems.map(i =>
+        `<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span>${escHtml(i.label)}${i.qty > 1 ? " × " + i.qty : ""}</span><span>$${i.amount}</span></div>`
+      ).join("");
+  }
+
   includesEl.innerHTML = `<li class="includes-title">Registration includes:</li>` +
     INCLUDES.map(i => `<li>${i}</li>`).join("");
 
@@ -2054,7 +2067,9 @@ function recomputeMultiTotal() {
     const id = document.getElementById(`p${n}_cat`)?.value;
     rows.push({ label: `Person ${n}`, cat: CATEGORIES[id] || null });
   }
-  const total = rows.reduce((s, r) => s + (r.cat ? effectivePriceFor(r.cat) : 0), 0);
+  const addOnItems = customAddOnItems();
+  const addOnTotal = addOnItems.reduce((s, i) => s + i.amount, 0);
+  const total = rows.reduce((s, r) => s + (r.cat ? effectivePriceFor(r.cat) : 0), 0) + addOnTotal;
 
   priceLabel.textContent = `Total for ${N} participants`;
   priceBig.innerHTML = total === 0 ? `Free` : `$${total} USD`;
@@ -2076,7 +2091,10 @@ function recomputeMultiTotal() {
       return `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0">
         <span>${r.label}</span><span style="color:var(--ink)">${right}</span>
       </div>`;
-    }).join("");
+    }).join("") +
+    addOnItems.map(i => `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0">
+        <span>${escHtml(i.label)}${i.qty > 1 ? " × " + i.qty : ""}</span><span style="color:var(--ink)">$${i.amount}</span>
+      </div>`).join("");
 }
 
 // ============================================================
@@ -2206,7 +2224,11 @@ function renderCustomFields() {
     const reqStar = f.required ? " *" : "";
     const req = f.required ? "required" : "";
     const id = "cf_" + f.key;
-    const safeLabel = escHtml(f.label);
+    const price = Number(f.price) || 0;
+    const priceTag = price > 0
+      ? ` <span style="color:var(--accent);font-weight:700">(${f.type === "number" ? `$${price} each` : `+$${price}`})</span>`
+      : "";
+    const safeLabel = escHtml(f.label) + priceTag;
     let control = "";
     if (f.type === "textarea") {
       control = `<textarea id="${id}" name="${id}" rows="3" ${req}></textarea>`;
@@ -2227,6 +2249,11 @@ function renderCustomFields() {
   }).join("");
 
   card.style.display = "";
+  // Priced add-ons refresh the price display live as they're (un)ticked.
+  CUSTOM_FIELDS.filter(f => (Number(f.price) || 0) > 0).forEach(f => {
+    const el = document.getElementById("cf_" + f.key);
+    if (el) el.addEventListener(f.type === "checkbox" ? "change" : "input", refreshPriceDisplay);
+  });
   // Re-run validation setup so the new fields get error spans + clear-on-input
   initFieldErrors();
 }
@@ -2241,6 +2268,32 @@ function collectCustomValues() {
               : (f.type === "number" ? (parseFloat(el.value) || null) : el.value.trim());
   }
   return out;
+}
+
+// Priced add-ons: a custom CHECKBOX field can carry a flat extra charge
+// (e.g. "Bus from Batroun to Tannourine (+$5)") and a NUMBER field a
+// per-unit charge ("Bus seats — $5 each"). Selected add-ons are added to
+// the displayed price and the stored priceUSD. On multi-participant
+// registrations the whole add-on amount lands on Person 1's registration
+// (one charge per group, matched against Person 1's Whish transfer).
+function customAddOnItems() {
+  const items = [];
+  for (const f of CUSTOM_FIELDS) {
+    const p = Number(f.price) || 0;
+    if (p <= 0) continue;
+    const el = document.getElementById("cf_" + f.key);
+    if (!el) continue;
+    if (f.type === "checkbox") {
+      if (el.checked) items.push({ key: f.key, label: f.label, qty: 1, amount: p });
+    } else if (f.type === "number") {
+      const q = Math.max(0, parseFloat(el.value) || 0);
+      if (q > 0) items.push({ key: f.key, label: f.label, qty: q, amount: Math.round(p * q * 100) / 100 });
+    }
+  }
+  return items;
+}
+function customAddOnTotal() {
+  return customAddOnItems().reduce((s, i) => s + i.amount, 0);
 }
 
 // ============================================================
@@ -2730,7 +2783,12 @@ form.addEventListener("submit", async (e) => {
   // the price (covers the case where they typed the phone and submitted fast
   // without the field losing focus).
   await lookupPhoneDiscount();
-  const price = effectivePriceFor(cat);
+  // Person 1 carries the whole add-on charge (bus seats etc.) on top of
+  // their own category price — one charge per submission, matched against
+  // Person 1's Whish transfer.
+  const addOnItems = customAddOnItems();
+  const addOnTotal = addOnItems.reduce((s, i) => s + i.amount, 0);
+  const price = effectivePriceFor(cat) + addOnTotal;
   const ref = generateRef();
 
   const payload = {
@@ -2758,6 +2816,8 @@ form.addEventListener("submit", async (e) => {
       dataUsage: !!data.dataConsent
     },
     priceUSD: price,
+    addOnsUSD: addOnTotal || 0,
+    addOns: addOnItems.length ? addOnItems : null,
     subQuestionAnswer: data.subQuestion || null,
     whishReference: ref,
     paymentStatus: price === 0 ? "free" : "pending",
@@ -2788,7 +2848,7 @@ form.addEventListener("submit", async (e) => {
 
     // Per-participant: resolve their own category, validate age, accumulate total.
     const personCats = [cat]; // Person 1's category
-    let totalPrice = effectivePriceFor(cat); // honours this phone's special pricing
+    let totalPrice = price; // Person 1's effective price incl. add-ons
     for (let i = 2; i <= N; i++) {
       const catId_i = data[`p${i}_cat`];
       const cat_i = CATEGORIES[catId_i];
@@ -2836,6 +2896,8 @@ form.addEventListener("submit", async (e) => {
           categoryId:   data[`p${i}_cat`],
           categoryName: cat_i.name,
           priceUSD:     effectivePriceFor(cat_i),
+          addOnsUSD:    0,
+          addOns:       null,
           paymentStatus: effectivePriceFor(cat_i) === 0 ? "free" : "pending",
           paymentMethod: effectivePriceFor(cat_i) === 0 ? "free" : "manual",
           subQuestionAnswer: data[`p${i}_sq`] || null,

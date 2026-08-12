@@ -758,6 +758,19 @@ Masters Men-Women 35-39 (1987-1991)
           </div>
           <div><label>Options (dropdown only, comma-separated)</label><input id="ffOpts" placeholder="Red,Blue,Black"></div>
         </div>
+        <div class="row two" style="margin-top:8px">
+          <div>
+            <label>Extra charge in USD — optional</label>
+            <input id="ffPrice" type="number" min="0" step="0.5" placeholder="e.g. 5">
+            <p class="muted" style="font-size:.8rem;margin:6px 0 0">
+              Adds to the registration total. <strong>Checkbox</strong> = flat charge when
+              ticked (e.g. "Bus from Batroun to Tannourine" +$5). <strong>Number</strong> =
+              charge × quantity (e.g. "Bus seats" at $5 each). On group registrations the
+              whole add-on lands on Person&nbsp;1's amount.
+            </p>
+          </div>
+          <div></div>
+        </div>
         <div style="margin-top:12px"><button id="ffAddBtn" class="btn">Add field</button></div>
       </div>
 
@@ -6554,7 +6567,7 @@ function renderFormFields() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
         <div>
           <strong>${escapeHtml(f.label)}</strong>
-          <span class="muted"> · ${escapeHtml(f.type)}${f.required?" · required":""}</span>
+          <span class="muted"> · ${escapeHtml(f.type)}${f.required?" · required":""}${(Number(f.price)||0) > 0 ? ` · <span style="color:var(--accent)">+$${f.price}${f.type === "number" ? " each" : ""}</span>` : ""}</span>
           <div class="muted" style="font-size:.85rem">key: <code>${escapeHtml(f.key)}</code>${f.options?` · options: ${escapeHtml(f.options.join(", "))}`:""}</div>
         </div>
         <button class="btn tiny danger" data-i="${i}">Remove</button>
@@ -6576,9 +6589,15 @@ $("#ffAddBtn").addEventListener("click", async () => {
   if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(key)) { toast("Key: letters/digits/underscore only, must start with letter", true); return; }
   if (formFields.some(f => f.key === key)) { toast("That key is already used", true); return; }
   if (type === "select" && opts.length === 0) { toast("Dropdowns need at least one option", true); return; }
+  const price = parseFloat($("#ffPrice").value) || 0;
+  if (price < 0) { toast("Extra charge can't be negative", true); return; }
+  if (price > 0 && type !== "checkbox" && type !== "number") {
+    toast("Extra charge works with Checkbox or Number fields only", true); return;
+  }
 
   const newField = { key, label, type, required };
   if (type === "select") newField.options = opts;
+  if (price > 0) newField.price = price;
 
   try {
     await setDoc(
@@ -6586,7 +6605,7 @@ $("#ffAddBtn").addEventListener("click", async () => {
       { fields: [...formFields, newField] },
       { merge: true }
     );
-    ["ffKey","ffLabel","ffOpts"].forEach(id => $("#"+id).value = "");
+    ["ffKey","ffLabel","ffOpts","ffPrice"].forEach(id => $("#"+id).value = "");
     toast("Field added");
   } catch (e) { toast(e.message, true); }
 });
