@@ -2081,6 +2081,12 @@ function recomputeMultiTotal() {
   const N = parseInt(participantCountSel.value, 10) || 1;
   const leadCat = CATEGORIES[catSelect.value];
 
+  // Clarify whose checkbox the main-card add-ons are once a group is chosen.
+  pricedCheckboxFields().forEach(f => {
+    const who = document.getElementById("cf_" + f.key + "_who");
+    if (who) who.hidden = N <= 1;
+  });
+
   if (N <= 1 || !leadCat) {
     breakdown.hidden = true;
     breakdown.innerHTML = "";
@@ -2264,10 +2270,14 @@ function renderCustomFields() {
       control = `<textarea id="${id}" name="${id}" rows="3" ${req}></textarea>`;
     } else if (f.type === "checkbox") {
       // Priced checkbox = flat per-person charge. In group registrations,
-      // each extra participant gets their own copy inside their block.
+      // each extra participant gets their own copy inside their block; the
+      // one here belongs to Person 1 — the "— for Person 1" tag appears
+      // only when more than one participant is selected.
+      const whoTag = price > 0
+        ? `<span id="${id}_who" class="muted" hidden style="font-weight:600"> — for Person 1</span>` : "";
       return `<div class="row"><label class="inline">
         <input type="checkbox" id="${id}" name="${id}" ${req}>
-        <span>${safeLabel}${reqStar}</span></label></div>`;
+        <span>${safeLabel}${reqStar}${whoTag}</span></label></div>`;
     } else if (f.type === "select") {
       const opts = '<option value="">Select…</option>' +
         (f.options || []).map(o => `<option>${String(o).replace(/</g,"&lt;")}</option>`).join("");
