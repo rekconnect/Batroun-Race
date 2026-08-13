@@ -122,27 +122,52 @@
     .pickup{padding:0 14px}
   }
 
-  /* Mobile-tuned spacing & layout — applies to most phones. */
+  /* Wide (landscape) layout — desktop AND print: instead of one tall
+     column, the ticket becomes a wide card with the QR + codes on the
+     left and all the details on the right, so everything fits without
+     scrolling (and on one PDF page). */
+  @media (min-width:700px), print{
+    .page{max-width:920px}
+    .ticket-body{display:grid;grid-template-columns:300px 1fr;gap:2px 26px;align-items:start}
+    .ticket-body > .qr-row{grid-column:1;grid-row:1 / span 8;
+                           flex-direction:column;justify-content:flex-start;gap:12px}
+    .ticket-body > .grid{grid-column:2;margin:8px 0 2px}
+    .ticket-body > .stub{grid-column:2;margin-top:12px}
+    .qr-side{text-align:center;max-width:none;width:100%}
+  }
+
+  /* Mobile-tuned spacing & layout — applies to most phones. Compact
+     enough that a normal phone shows the whole ticket in ~one screen. */
   @media (max-width:520px){
     .page{padding:10px 8px 28px}
     .toolbar{justify-content:stretch}
     .toolbar .btn{flex:1;width:100%}
-    .ticket-header{padding:18px 16px 22px}
-    .ticket-body{padding:18px 14px 14px}
-    .qr-row{flex-direction:column;gap:12px}
+    .ticket-header{padding:14px 16px 18px}
+    .ticket-body{padding:14px 12px 12px}
+    .qr-row{flex-direction:column;gap:10px;padding:2px 0}
+    .qr-card > div, .qr-card canvas, .qr-card img{
+      width:clamp(150px,44vw,190px)!important;
+      height:clamp(150px,44vw,190px)!important
+    }
     .qr-side{text-align:center;max-width:none;width:100%}
-    .ref{margin-bottom:10px}
-    .hint{margin:12px 14px 18px;font-size:.82rem}
+    .ref{margin-bottom:8px;padding:6px 12px}
+    .grid{gap:8px;margin:10px 0 2px}
+    .grid > div{padding:8px 10px}
+    .stub{margin-top:12px;padding-top:10px}
+    .hint{margin:10px 12px 6px;font-size:.82rem;padding:10px 12px}
+    .pickup{margin-bottom:16px}
   }
 
-  /* Print → "Save as PDF" path. Strip the page background, hide the
-     toolbar, and let the ticket sit cleanly on a single page. */
+  /* Print → "Save as PDF" path. Landscape page + the wide two-column
+     layout above = the whole ticket on a single page. */
   @media print{
+    @page{size:A4 landscape;margin:10mm}
     html,body{background:#fff!important;color:#000}
     .toolbar{display:none!important}
     .ticket{box-shadow:none;border:1px solid #d0d6df;page-break-inside:avoid}
     .page{max-width:none;margin:0;padding:0}
     .ticket-header{background:#08172b!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .hint,.pickup{page-break-inside:avoid}
     a[href]:after{content:""}
   }
 </style>
