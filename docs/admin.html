@@ -7328,6 +7328,14 @@ function compressImageToDataURL(file, maxW = 1600, maxH = 1200, quality = 0.82) 
         const canvas = document.createElement("canvas");
         canvas.width = w; canvas.height = h;
         canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        // PNG/WebP sources keep their TRANSPARENCY: try PNG first, and only
+        // fall back to JPEG (which flattens the background) when the PNG
+        // would blow past the size cap. Lets a transparent logo blend with
+        // the page background instead of sitting in a baked-in square.
+        if (/png|webp|gif/i.test(file.type || "")) {
+          const png = canvas.toDataURL("image/png");
+          if (png.length <= 800 * 1024) { resolve(png); return; }
+        }
         // Try JPEG first; if still too big, drop quality.
         let q = quality;
         let dataUrl = canvas.toDataURL("image/jpeg", q);
