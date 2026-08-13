@@ -4,6 +4,28 @@
 <meta charset="utf-8">
 <meta content="width=device-width,initial-scale=1" name="viewport">
 <title>Register — Batroun Race</title>
+<script>
+/* Apply the CACHED theme colors before first paint, so repeat visitors never
+   see the built-in palette flash before the admin theme kicks in. The module
+   below re-applies (and refreshes) the full theme as usual; brand-new
+   visitors still start from the built-in colors until the first fetch. */
+(function () {
+  try {
+    var comp = "batroun-race-2026";
+    var a = JSON.parse(localStorage.getItem("br-active-comp-v1") || "null");
+    if (a && a.id) comp = a.id;
+    var c = JSON.parse(localStorage.getItem("br-config-" + comp + "-v1") || "null");
+    var t = c && c.data && c.data.theme;
+    if (!t) return;
+    var r = document.documentElement.style;
+    if (t.accent)  r.setProperty("--accent",  t.accent);
+    if (t.accent2) r.setProperty("--accent2", t.accent2);
+    if (t.ink)     r.setProperty("--ink",     t.ink);
+    if (t.bg1)     r.setProperty("--bg1",     t.bg1);
+    if (t.bg2)     r.setProperty("--bg2",     t.bg2);
+  } catch (e) {}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
