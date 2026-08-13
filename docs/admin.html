@@ -800,13 +800,50 @@ Masters Men-Women 35-39 (1987-1991)
         <h2>Colors</h2>
         <p class="muted" style="margin:0 0 12px">These set the look of the public registration page. Hex format.</p>
         <div class="row three">
-          <div><label>Accent (primary)</label><input id="thAccent" type="color"></div>
-          <div><label>Accent 2 (secondary)</label><input id="thAccent2" type="color"></div>
-          <div><label>Text color</label><input id="thInk" type="color"></div>
+          <div><label>Accent (primary)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="thAccent" type="color" style="width:52px;height:38px;padding:2px;flex:0 0 auto">
+              <input id="thAccentText" type="text" placeholder="#F7A00A" autocapitalize="characters"
+                     style="flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace">
+            </div>
+          </div>
+          <div><label>Accent 2 (secondary)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="thAccent2" type="color" style="width:52px;height:38px;padding:2px;flex:0 0 auto">
+              <input id="thAccent2Text" type="text" placeholder="#DE8E05" autocapitalize="characters"
+                     style="flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace">
+            </div>
+          </div>
+          <div><label>Text color</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="thInk" type="color" style="width:52px;height:38px;padding:2px;flex:0 0 auto">
+              <input id="thInkText" type="text" placeholder="#F4F7FC" autocapitalize="characters"
+                     style="flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace">
+            </div>
+          </div>
         </div>
         <div class="row two">
-          <div><label>Background — gradient top</label><input id="thBg1" type="color"></div>
-          <div><label>Background — gradient bottom</label><input id="thBg2" type="color"></div>
+          <div><label>Background — gradient top</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="thBg1" type="color" style="width:52px;height:38px;padding:2px;flex:0 0 auto">
+              <input id="thBg1Text" type="text" placeholder="#030F2B" autocapitalize="characters"
+                     style="flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace">
+            </div>
+          </div>
+          <div><label>Background — gradient bottom</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="thBg2" type="color" style="width:52px;height:38px;padding:2px;flex:0 0 auto">
+              <input id="thBg2Text" type="text" placeholder="#0A1E45" autocapitalize="characters"
+                     style="flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace">
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <button id="thBrandPresetBtn" class="btn sec">Apply batrounrace.com brand colors</button>
+          <p class="muted" style="font-size:.8rem;margin:6px 0 0">
+            Fills the five colors with the main website's palette (navy + sun orange).
+            Review, then press <strong>Save theme</strong> below.
+          </p>
         </div>
       </div>
 
@@ -6741,12 +6778,47 @@ async function removeFormField(i) {
 }
 
 // ===== Theme =====
+// Each color has a picker + a hex text twin (typable on mobile, where the
+// native color wheel makes entering an exact brand hex impossible). The
+// picker is the value the save reads; the twin syncs both ways.
+const THEME_COLOR_IDS = ["thAccent", "thAccent2", "thInk", "thBg1", "thBg2"];
+function syncColorTextTwins() {
+  THEME_COLOR_IDS.forEach(id => {
+    const t = $("#" + id + "Text");
+    if (t) t.value = ($("#" + id).value || "").toUpperCase();
+  });
+}
+THEME_COLOR_IDS.forEach(id => {
+  const p = $("#" + id), t = $("#" + id + "Text");
+  if (!p || !t) return;
+  p.addEventListener("input", () => { t.value = p.value.toUpperCase(); });
+  t.addEventListener("input", () => {
+    let v = t.value.trim();
+    if (/^[0-9a-fA-F]{6}$/.test(v)) v = "#" + v;   // forgive a missing #
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) p.value = v;
+  });
+});
+
+// One-tap preset: the batrounrace.com palette (navy + sun orange).
+const BRAND_THEME_COLORS = {
+  thAccent: "#F7A00A", thAccent2: "#DE8E05", thInk: "#F4F7FC",
+  thBg1: "#030F2B", thBg2: "#0A1E45"
+};
+$("#thBrandPresetBtn")?.addEventListener("click", () => {
+  Object.entries(BRAND_THEME_COLORS).forEach(([id, v]) => {
+    const p = $("#" + id); if (p) p.value = v;
+  });
+  syncColorTextTwins();
+  toast("Brand colors applied — press Save theme to publish");
+});
+
 function loadThemeIntoEditor(t) {
   $("#thAccent").value   = t.accent   || "#27cbbb";
   $("#thAccent2").value  = t.accent2  || "#56a8ff";
   $("#thInk").value      = t.ink      || "#eaf1fb";
   $("#thBg1").value      = t.bg1      || "#0a1628";
   $("#thBg2").value      = t.bg2      || "#11243d";
+  syncColorTextTwins();
   $("#thBgImage").value  = t.bgImage  || "";
   $("#thHeading").value  = t.heading  || "";
   $("#thSubtitle").value = t.subtitle || "";
