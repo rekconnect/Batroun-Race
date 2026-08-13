@@ -1096,6 +1096,8 @@ function effectivePriceFor(cat) {
 
 let CUSTOM_FIELDS = [];
 let CUSTOM_SECTION_TITLE = "Additional info";   // admin-set (form.sectionTitle)
+let EMAIL_CFG = null;    // /config/email — Apps Script webhook for auto-emails
+let RAW_THEME = null;    // full theme doc (for the email/WhatsApp templates)
 let REGISTRATION_OPENS  = null;          // Date — when registration becomes available
 let REGISTRATION_CLOSES = null;          // Date — when registration shuts
 
@@ -1436,6 +1438,43 @@ function refreshPriceDisplay() {
   if (multiActive) { recomputeMultiTotal(); return; }
   // Re-trigger the single price-card render via the category change handler.
   catSelect.dispatchEvent(new Event("change"));
+}
+
+// ===== Automatic email (Apps Script webhook, configured in admin Settings) =====
+// Fire-and-forget: a failed email never blocks or breaks registration — the
+// confirmation panel shows everything, and the admin can still send manually.
+function sendAutoEmail(to, subject, body) {
+  try {
+    if (!EMAIL_CFG?.webhookUrl || !/^https:\/\/script\.google\.com\//.test(EMAIL_CFG.webhookUrl)) return;
+    if (!to) return;
+    fetch(EMAIL_CFG.webhookUrl, {
+      method: "POST",
+      // text/plain keeps it a "simple" CORS request (no preflight, which
+      // Apps Script web apps don't answer).
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        token: EMAIL_CFG.token || "",
+        to, subject, body,
+        fromName: COMPETITION_NAME
+      })
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+// The payment-request email body — same template as the admin's "first
+// WhatsApp message" (theme.pendingWaText), with a built-in fallback.
+function buildPendingEmailBody(name, ref) {
+  const link = `https://register.batrounrace.com/?signin=${encodeURIComponent(ref)}`;
+  const template = (RAW_THEME?.pendingWaText || "").trim() ||
+    `Hi {name}, thank you for registering for {event}!\n` +
+    `To secure your spot, please complete your payment:\n{link}\n` +
+    `Reference: {ref}\n` +
+    `Your bib and QR ticket are sent the moment we receive the payment.`;
+  return template
+    .replace(/\{name\}/g, name || "")
+    .replace(/\{ref\}/g, ref)
+    .replace(/\{link\}/g, link)
+    .replace(/\{event\}/g, COMPETITION_NAME);
 }
 
 function generateRef() {
@@ -2718,6 +2757,8 @@ async function fetchConfigData() {
   if (formSnap.exists() && formSnap.data().sectionTitle) data.customFieldsTitle = formSnap.data().sectionTitle;
   const pfSnap = await getDoc(doc(db, "competitions", COMPETITION_ID, "config", "publicForm"));
   if (pfSnap.exists()) data.publicForm = { builtIn: pfSnap.data().builtIn || {}, includes: pfSnap.data().includes || [] };
+  const emailSnap = await getDoc(doc(db, "competitions", COMPETITION_ID, "config", "email"));
+  if (emailSnap.exists()) data.emailCfg = emailSnap.data();
   return data;
 }
 
@@ -2741,7 +2782,9 @@ function applyConfigData(data) {
     if (ri && /-XXXX$/.test(ri.textContent)) ri.textContent = REF_PREFIX + "-XXXX";
   }
   if (data.categories)      CATEGORIES = data.categories;
+  if (data.emailCfg) EMAIL_CFG = data.emailCfg;
   if (data.theme) {
+    RAW_THEME = data.theme;   // templates for the auto-emails
     // Resolve the {event} placeholder in any theme text (heading, subtitle,
     // banner, payment copy, logo text, ...) to this event's display name —
     // so per-event wording like "Register for {event}" never needs editing
@@ -3090,6 +3133,17 @@ form.addEventListener("submit", async (e) => {
       { merge: true }
     );
     await batch.commit();
+
+    // Automatic payment-request email (when enabled in admin Settings and
+    // there is something to pay). One email to the lead's address, carrying
+    // Person 1's reference — the signin link shows the whole group.
+    if (totalPrice > 0 && EMAIL_CFG?.autoPending && payload.email) {
+      sendAutoEmail(
+        payload.email,
+        `${COMPETITION_NAME} — Registration received, payment needed`,
+        buildPendingEmailBody(payload.firstName, refs[0])
+      );
+    }
 
     // Auto-sign-in so the cart icon + Hi-name appear in the top bar
     // immediately. Confirmation panel still shows for payment instructions.
