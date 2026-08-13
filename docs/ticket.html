@@ -434,8 +434,13 @@ function writeTicketCache(data) {
         compNameRaw: (typeof c.name === "string" && c.name.trim()) ? c.name.trim() : null,
         raceStartTime: c.raceStartTime || null,
         raceLocation:  c.raceLocation  || null,
-        mapUrl: (typeof c.raceLocationMapUrl === "string" && /^https?:\/\//i.test(c.raceLocationMapUrl.trim()))
-                  ? c.raceLocationMapUrl.trim() : null,
+        // Category start-line link wins over the event-wide one.
+        mapUrl: (() => {
+          for (const u of [cat.mapUrl, c.raceLocationMapUrl]) {
+            if (typeof u === "string" && /^https?:\/\//i.test(u.trim())) return u.trim();
+          }
+          return null;
+        })(),
         catStartTime:  cat.startTime    || null,
         catBibColor:   cat.bibColor      || null,
         catName:       cat.name          || null,

@@ -93,6 +93,7 @@ competitions/{competitionId}/categories/{categoryId}
   ├─ bibCursor: int                             // next bib to assign — bumped by the confirm-payment transaction, atomic, no duplicate bibs even under concurrent confirms
   ├─ bibColor: "#RRGGBB"                        // displayed next to the bib number on tickets + admin lists
   ├─ startTime: "HH:MM"                         // overrides the event-wide raceStartTime on this category's tickets
+  ├─ mapUrl                                     // overrides the event-wide raceLocationMapUrl (competition doc) on this category's tickets
   ├─ isRelay: bool                              // when true → public form collects a teammate; teammate shares Person 1's bib (one bib per team doc)
   └─ subQuestion: { label, options[] } | null   // e.g. age-bracket dropdown
 
