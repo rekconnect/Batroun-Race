@@ -394,7 +394,7 @@ function applyTicketSponsor(elId, value) {
 // Firestore every time — the URL params already render instantly, this is
 // only the live-override refresh. Stored NORMALISED (plain strings, no
 // Firestore Timestamps) so it survives JSON round-tripping.
-const TICKET_CACHE_KEY = "br-ticket-" + COMPETITION_ID_LIVE + "-" + (catId || "none") + "-v3";
+const TICKET_CACHE_KEY = "br-ticket-" + COMPETITION_ID_LIVE + "-" + (catId || "none") + "-v4";
 const TICKET_CACHE_TTL_MS = 10 * 60 * 1000;
 function readTicketCache() {
   try {
@@ -434,6 +434,8 @@ function writeTicketCache(data) {
         compNameRaw: (typeof c.name === "string" && c.name.trim()) ? c.name.trim() : null,
         raceStartTime: c.raceStartTime || null,
         raceLocation:  c.raceLocation  || null,
+        mapUrl: (typeof c.raceLocationMapUrl === "string" && /^https?:\/\//i.test(c.raceLocationMapUrl.trim()))
+                  ? c.raceLocationMapUrl.trim() : null,
         catStartTime:  cat.startTime    || null,
         catBibColor:   cat.bibColor      || null,
         catName:       cat.name          || null,
@@ -457,6 +459,21 @@ function writeTicketCache(data) {
     const liveStart = b.catStartTime || b.raceStartTime || null;
     if (liveStart) window.renderStart(liveStart);
     if (b.raceLocation) window.renderLoc(b.raceLocation);
+    // Map link: the location becomes tappable and opens the admin-set map
+    // URL (Competition tab). Built with DOM APIs so the URL can't inject.
+    if (b.mapUrl) {
+      const locEl = document.getElementById("loc");
+      if (locEl) {
+        const a = document.createElement("a");
+        a.href = b.mapUrl;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.style.cssText = "color:inherit;text-decoration:underline;text-underline-offset:3px";
+        a.textContent = "📍 " + (locEl.textContent || "Open map");
+        locEl.textContent = "";
+        locEl.appendChild(a);
+      }
+    }
     if (b.catBibColor)  window.renderColor(b.catBibColor);
     // Refresh the category name + sub-question label if the admin renamed
     // them after this ticket URL was first generated.

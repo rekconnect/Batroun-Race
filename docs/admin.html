@@ -1178,6 +1178,18 @@ See you at the start line!"></textarea>
         </div>
         <div class="row two">
           <div>
+            <label>Race location map link (optional)</label>
+            <input id="cpMapUrl" type="url" placeholder="https://maps.app.goo.gl/…">
+            <p class="muted" style="font-size:.8rem;margin:6px 0 0">
+              Paste a Google Maps share link (Maps app → the start-line spot →
+              Share → Copy link). The location on every runner's ticket becomes
+              tappable and opens this map.
+            </p>
+          </div>
+          <div></div>
+        </div>
+        <div class="row two">
+          <div>
             <label>Whish reference prefix</label>
             <input id="cpRefPrefix" placeholder="BTN-2026" style="font-family:ui-monospace,Menlo,monospace">
             <p class="muted" style="font-size:.8rem;margin:6px 0 0">
@@ -7317,7 +7329,7 @@ $("#themeSaveBtn").addEventListener("click", async () => {
 let competitionDirty = false;
 
 function markCompetitionDirty() { competitionDirty = true; }
-["cpName","cpYear","cpOpens","cpCloses","cpRaceDay","cpStartTime","cpLocation","cpRefPrefix"].forEach(id => {
+["cpName","cpYear","cpOpens","cpCloses","cpRaceDay","cpStartTime","cpLocation","cpMapUrl","cpRefPrefix"].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener("input", markCompetitionDirty);
 });
@@ -7339,6 +7351,7 @@ function loadCompetitionIntoEditor(c) {
   $("#cpRaceDay").value = c.raceDay ? c.raceDay.slice(0,10) : "";
   $("#cpStartTime").value = c.raceStartTime || "";
   $("#cpLocation").value = c.raceLocation || "";
+  $("#cpMapUrl").value = c.raceLocationMapUrl || "";
   $("#cpRefPrefix").value = c.refPrefix || "";
 }
 
@@ -7383,6 +7396,10 @@ $("#competitionSaveBtn").addEventListener("click", async () => {
     raceDay: $("#cpRaceDay").value || null,
     raceStartTime: $("#cpStartTime").value || null,
     raceLocation: $("#cpLocation").value.trim() || null,
+    raceLocationMapUrl: (() => {
+      const u = $("#cpMapUrl").value.trim();
+      return /^https?:\/\//i.test(u) ? u : null;
+    })(),
     refPrefix: $("#cpRefPrefix").value.trim().replace(/-+$/, "") || null
   };
 
