@@ -6236,6 +6236,16 @@ function openEditCategory(c) {
     </div>
 
     <div class="row two" style="margin-top:8px">
+      <div>
+        <label>Start-location map link (this category)</label>
+        <input id="ec_mapUrl" type="url" value="${escapeHtml(c.mapUrl || "")}" placeholder="https://maps.app.goo.gl/…">
+      </div>
+      <div style="display:flex;align-items:flex-end;padding-bottom:4px">
+        <span class="muted" style="font-size:.82rem">Leave empty to use the event-wide map link from <strong>Competition</strong>. Filled here, this category's tickets point at its own start line.</span>
+      </div>
+    </div>
+
+    <div class="row two" style="margin-top:8px">
       <div><label>BIB range — start</label><input id="ec_bibStart" type="number" min="1" value="${c.bibRangeStart ?? ""}" placeholder="e.g. 1"></div>
       <div><label>BIB range — end</label><input id="ec_bibEnd" type="number" min="1" value="${c.bibRangeEnd ?? ""}" placeholder="e.g. 200"></div>
     </div>
@@ -6332,6 +6342,10 @@ Masters Men-Women 35-39 (1987-1991)
         bibRangeEnd:   parseInt($("#ec_bibEnd").value,   10) || null,
         bibColor: $("#ec_bibColor").value || null,
         startTime: $("#ec_startTime").value || null,
+        mapUrl: (() => {
+          const u = $("#ec_mapUrl").value.trim();
+          return /^https?:\/\//i.test(u) ? u : null;
+        })(),
         isRelay: $("#ec_isRelay").checked,
         allowMultiParticipant: $("#ec_multi").checked,
         excludeOverallFromAge: $("#ec_excludeOverall").checked,
