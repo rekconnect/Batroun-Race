@@ -1940,6 +1940,9 @@ function renderExtraParticipants(count) {
   });
 
   const leadCatId = catSelect.value;
+  // Single-category event: nothing to choose per participant either — the
+  // select stays in the DOM (submit reads its value) but the row is hidden.
+  const singleCat = Object.keys(CATEGORIES).length === 1;
   const cards = [];
   for (let n = 2; n <= count; n++) {
     const p = `p${n}_`;
@@ -1947,7 +1950,7 @@ function renderExtraParticipants(count) {
       <div class="card extra-participant" data-person="${n}">
         <h3 class="title">Participant ${n}</h3>
         <p class="muted" style="margin:0 0 12px">Shared with Person 1: mobile, email, address, club, emergency contact.</p>
-        <div class="row">
+        <div class="row"${singleCat ? ' style="display:none"' : ""}>
           <label for="${p}cat">Race / Category *</label>
           <select id="${p}cat" name="${p}cat" required>
             <option value="">Select…</option>
@@ -3558,13 +3561,15 @@ function multiCatOptionsAllOrSafe(selectedId) {
 cartAddBtn?.addEventListener("click", () => {
   const lead = SESSION_REGS[0];
   if (!lead) { toast?.("No existing registration on this mobile.", true); return; }
-  const defaultCat = lead.categoryId || "";
+  const catIds = Object.keys(CATEGORIES).filter(id => !CATEGORIES[id].isRelay);
+  const singleCat = catIds.length === 1;
+  const defaultCat = singleCat ? catIds[0] : (lead.categoryId || "");
   cartAddForm.hidden = false;
   cartAddForm.innerHTML = `
     <div class="card" style="background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0">
       <h3 class="title" style="font-size:1.05rem;margin-top:0">New participant</h3>
       <p class="muted" style="margin:0 0 12px;font-size:.85rem">Will be registered under <strong>${escHtml(lead.phone || "")}</strong>. Shared contact details are reused from your first registration.</p>
-      <div class="row">
+      <div class="row"${singleCat ? ' style="display:none"' : ""}>
         <label for="ca_cat">Race / Category *</label>
         <select id="ca_cat" name="ca_cat" required>
           <option value="">Select…</option>
