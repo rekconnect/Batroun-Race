@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#08172b">
+<meta name="theme-color" content="#030F2B">
 <title>Race Ticket — Batroun Race</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root{
-    --bg1:#08172b; --bg2:#0d2140;
+    --bg1:#030F2B; --bg2:#0A1E45;
     --ink:#0b1726; --paper:#ffffff; --muted:#5b6c80; --line:#e2e8f0;
-    --accent:#21b3a7; --accent2:#3dd6c6;
+    --accent:#DE8E05; --accent2:#F7A00A;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;min-height:100%;
             background:linear-gradient(180deg,var(--bg1),var(--bg2));
             color:var(--ink);
-            font:15px/1.55 'Inter',system-ui,-apple-system,Segoe UI,Roboto;
+            font:15px/1.55 'Instrument Sans',system-ui,-apple-system,Segoe UI,Roboto;
             -webkit-font-smoothing:antialiased;
             -webkit-text-size-adjust:100%}
   .page{max-width:640px;margin:0 auto;
@@ -26,9 +26,9 @@
 
   .toolbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px}
   .btn{appearance:none;border:0;border-radius:12px;padding:12px 18px;
-       font:inherit;font-weight:800;cursor:pointer;color:#062028;
+       font:inherit;font-weight:800;cursor:pointer;color:#fff;
        background:linear-gradient(180deg,var(--accent2),var(--accent));
-       box-shadow:0 6px 18px rgba(33,179,167,.35);
+       box-shadow:0 6px 18px rgba(222,142,5,.35);
        min-height:44px}
   .btn:active{transform:scale(.98)}
   .btn.sec{background:rgba(255,255,255,.94);color:#1a2b3d}
@@ -37,7 +37,7 @@
           overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.45);
           border:1px solid rgba(0,0,0,.04)}
 
-  .ticket-header{background:linear-gradient(135deg,#08172b 0%,#11365e 100%);
+  .ticket-header{background:linear-gradient(135deg,#030F2B 0%,#0A1E45 100%);
                  color:#ecf6ff;padding:22px 22px 26px;text-align:center;position:relative}
   .ticket-header::after{content:"";position:absolute;left:-10px;right:-10px;bottom:-10px;height:20px;
                         background:radial-gradient(circle at 10px 10px, var(--paper) 9px, transparent 10px) 0 0/20px 20px}
@@ -59,7 +59,8 @@
   }
   .brand{font-weight:900;font-size:.74rem;letter-spacing:.22em;
          text-transform:uppercase;color:var(--accent2);margin:0 0 4px}
-  .ticket-title{margin:0;font-size:clamp(20px,5.2vw,28px);font-weight:900;letter-spacing:-.01em;color:#fff}
+  .ticket-title{margin:0;font-size:clamp(20px,5.2vw,28px);font-weight:900;letter-spacing:-.01em;color:#fff;
+                font-family:'Bricolage Grotesque','Instrument Sans',sans-serif}
   .ticket-sub{color:#a9c5dd;margin:6px 0 0;font-size:.92rem;word-break:break-word}
 
   .ticket-body{padding:24px 20px 16px}
@@ -81,7 +82,7 @@
             font-weight:700;margin:0 0 4px}
   .ref{display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
        font-size:clamp(1rem,3.6vw,1.2rem);font-weight:900;color:var(--accent);letter-spacing:1.5px;
-       background:rgba(33,179,167,.08);border:1px dashed rgba(33,179,167,.4);
+       background:rgba(222,142,5,.08);border:1px dashed rgba(222,142,5,.4);
        padding:8px 14px;border-radius:10px;user-select:all;margin:0 0 14px;
        word-break:break-all;max-width:100%}
   .bib-big{font-weight:900;font-size:clamp(1.8rem,8vw,2.2rem);
@@ -179,7 +180,7 @@
     .toolbar{display:none!important}
     .ticket{box-shadow:none;border:1px solid #d0d6df;page-break-inside:avoid}
     .page{max-width:none;margin:0;padding:0}
-    .ticket-header{background:#08172b!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .ticket-header{background:#030F2B!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .hint,.pickup{page-break-inside:avoid}
     a[href]:after{content:""}
   }
