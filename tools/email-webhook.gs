@@ -62,9 +62,19 @@ function doPost(e) {
     const n = Number(props.getProperty(key) || 0);
     if (n >= DAILY_CAP) return out_({ ok: false, error: "daily cap reached" });
 
+    // Duplicate guard: the identical email (same recipient + subject + body)
+    // within 5 minutes is sent only ONCE — protects against browsers or
+    // networks that fire the request twice.
+    const cache = CacheService.getScriptCache();
+    const sig = Utilities.base64Encode(Utilities.computeDigest(
+      Utilities.DigestAlgorithm.MD5, to + "|" + subject + "|" + body,
+      Utilities.Charset.UTF_8));
+    if (cache.get(sig)) return out_({ ok: true, deduped: true });
+
     GmailApp.sendEmail(to, subject, body + (SIGNATURE ? "\n\n" + SIGNATURE : ""), {
       name: String(data.fromName || "Batroun Race").slice(0, 80)
     });
+    cache.put(sig, "1", 300);
     props.setProperty(key, String(n + 1));
 
     return out_({ ok: true, sentToday: n + 1 });

@@ -5821,9 +5821,12 @@ function openConfirmPay(r) {
       closeModal();
       toast((priceFree ? "Free entry confirmed — bib " : "Payment confirmed — bib ") + assignedBib + " assigned");
       const updated = { ...r, bibNumber: assignedBib, paymentStatus: priceFree ? "free" : "paid" };
-      // Automatic confirmation email (Settings → Automatic email) — sends in
-      // the background with the same template; stamps the ✓ on success.
-      if (emailCfg.autoConfirmed && emailCfg.webhookUrl && String(r.email || "").trim()) {
+      // Confirmation email. When the webhook is configured, email goes out
+      // DIRECTLY (no mail window) — whether triggered by the auto toggle or
+      // by picking "Email" in this dialog — and only once. The old
+      // open-compose flow remains only for setups without the webhook.
+      const wantsEmail = (emailCfg.autoConfirmed || sendVia === "email") && String(r.email || "").trim();
+      if (wantsEmail && emailCfg.webhookUrl) {
         sendWebhookEmail(
           String(r.email).trim(),
           `${currentEventLabel()} — Registration confirmed, your race ticket`,
@@ -5834,21 +5837,18 @@ function openConfirmPay(r) {
               confirmedEmailSentAt: serverTimestamp(),
               confirmedEmailSentBy: "auto (" + (currentUserEmail || "admin") + ")"
             }).catch(() => {});
-            toast(res.ok ? "Confirmation email sent automatically"
-                         : "Confirmation email dispatched (unconfirmed by this browser)");
+            toast("Confirmation email sent");
           } else {
             toast("Auto-email failed — use the manual Email button", true);
           }
         });
+      } else if (sendVia === "email") {
+        sendEmail(updated, "confirmed");   // no webhook configured → open compose
       }
-      if (sendVia !== "none") {
-        if (sendVia === "email") {
-          sendEmail(updated, "confirmed");
-        } else {
-          const waUrl = buildWhatsAppUrl(updated);
-          if (waUrl) window.open(waUrl, "_blank", "noopener");
-          else toast("No phone number on record — couldn't open WhatsApp", true);
-        }
+      if (sendVia === "whatsapp") {
+        const waUrl = buildWhatsAppUrl(updated);
+        if (waUrl) window.open(waUrl, "_blank", "noopener");
+        else toast("No phone number on record — couldn't open WhatsApp", true);
       }
     } catch (e) { toast(e.message, true); }
   };
