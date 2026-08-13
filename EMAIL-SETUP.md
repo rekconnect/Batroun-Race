@@ -47,6 +47,7 @@ policy limit, not ours.
   script also has its own safety cap (`DAILY_CAP`, default 120) so nothing
   can burn the quota in one go. On a heavy promo day, the manual email
   button still works as a fallback.
+- An email-only **signature** is set in the script (the `SIGNATURE` constant) — Gmail's saved signature is NOT applied by Apps Script. Edit it there; WhatsApp is unaffected.
 - The email texts are the same templates as WhatsApp (admin → Theme & copy),
   with all placeholders (`{name}`, `{ref}`, `{link}`, `{bib}`, `{ticket}`,
   `{event}`, …) resolved.

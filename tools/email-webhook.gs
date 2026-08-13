@@ -18,6 +18,29 @@ const SECRET_TOKEN = "CHANGE-ME-to-a-long-random-string";
 // Safety cap on how many emails this script will send per calendar day.
 const DAILY_CAP = 120;
 
+// Appended to the end of every EMAIL (WhatsApp is unaffected). Gmail's own
+// saved signature is NOT applied by Apps Script, so set it here. Leave ""
+// for no signature. \n = new line.
+const SIGNATURE =
+  "--\n" +
+  "Batroun Race Team\n" +
+  "batrounrace.com | @batrounrace\n" +
+  "WhatsApp: +961 81 300 625";
+
+// Visiting the web-app URL in a browser (a GET) shows a friendly status
+// instead of Google's "unable to open the file" error — an easy health
+// check that the deployment is alive. Sending always goes through doPost.
+function doGet() {
+  const props = PropertiesService.getScriptProperties();
+  const key = "sent-" + new Date().toISOString().slice(0, 10);
+  return out_({
+    ok: true,
+    service: "Batroun Race email webhook",
+    sentToday: Number(props.getProperty(key) || 0),
+    dailyCap: DAILY_CAP
+  });
+}
+
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
@@ -39,7 +62,7 @@ function doPost(e) {
     const n = Number(props.getProperty(key) || 0);
     if (n >= DAILY_CAP) return out_({ ok: false, error: "daily cap reached" });
 
-    GmailApp.sendEmail(to, subject, body, {
+    GmailApp.sendEmail(to, subject, body + (SIGNATURE ? "\n\n" + SIGNATURE : ""), {
       name: String(data.fromName || "Batroun Race").slice(0, 80)
     });
     props.setProperty(key, String(n + 1));

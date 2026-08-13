@@ -2317,25 +2317,56 @@ onSnapshot(
   err => console.warn("[email] config listener:", err.message)
 );
 
+// Returns { ok, detail, blind }. `blind: true` = the request was dispatched
+// but the response couldn't be read (some browsers block reading Apps
+// Script's redirected response) — the email may well have been sent anyway.
 async function sendWebhookEmail(to, subject, body) {
+  const payload = JSON.stringify({
+    token: emailCfg.token || "",
+    to, subject, body,
+    fromName: currentEventLabel()
+  });
+  if (!/^https:\/\/script\.google\.com\/.+\/exec\b/.test(emailCfg.webhookUrl || "")) {
+    return { ok: false, detail: "The URL must be the script.google.com web-app link ending in /exec (not /dev)." };
+  }
   try {
-    if (!/^https:\/\/script\.google\.com\//.test(emailCfg.webhookUrl || "")) return false;
     const res = await fetch(emailCfg.webhookUrl, {
       method: "POST",
       // text/plain = simple CORS request (Apps Script answers no preflight)
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        token: emailCfg.token || "",
-        to, subject, body,
-        fromName: currentEventLabel()
-      })
+      body: payload
     });
-    const j = await res.json().catch(() => null);
-    if (j && !j.ok) console.warn("[email] webhook refused:", j.error);
-    return !!(j && j.ok);
+    const text = await res.text().catch(() => "");
+    let j = null;
+    try { j = JSON.parse(text); } catch (_) {}
+    if (j && j.ok) return { ok: true };
+    if (j && j.error) {
+      console.warn("[email] webhook refused:", j.error);
+      const hints = {
+        unauthorized: "Token mismatch — the Settings token must equal the script's SECRET_TOKEN, and the token version must be DEPLOYED (Manage deployments → New version).",
+        "bad recipient": "The recipient email looks invalid.",
+        "daily cap reached": "The script's daily send cap is used up for today."
+      };
+      return { ok: false, detail: `Script said: ${j.error}. ${hints[j.error] || ""}` };
+    }
+    if (/accounts\.google\.com|Sign in/i.test(text)) {
+      return { ok: false, detail: "Google asked for a login — the deployment's 'Who has access' must be Anyone (not 'Anyone with Google account'). Manage deployments → edit → Anyone → New version." };
+    }
+    return { ok: false, detail: `Unexpected reply (HTTP ${res.status}): ${text.slice(0, 120) || "(empty)"}` };
   } catch (e) {
-    console.warn("[email] webhook send failed:", e?.message);
-    return false;
+    // Couldn't read the response (CORS). Fire the same request blind — it
+    // still reaches the script, so the email may send even though we can't
+    // confirm it from here.
+    try {
+      await fetch(emailCfg.webhookUrl, {
+        method: "POST", mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: payload
+      });
+      return { ok: false, blind: true, detail: "Request dispatched, but this browser blocks reading the reply. CHECK YOUR INBOX — if the email arrived, everything actually works." };
+    } catch (e2) {
+      return { ok: false, detail: "Network error: " + (e2?.message || e2) };
+    }
   }
 }
 
@@ -2361,14 +2392,18 @@ document.getElementById("emSaveBtn")?.addEventListener("click", async () => {
 document.getElementById("emTestBtn")?.addEventListener("click", async () => {
   const btn = document.getElementById("emTestBtn");
   btn.disabled = true;
-  const ok = await sendWebhookEmail(
+  const r = await sendWebhookEmail(
     currentUserEmail,
     `${currentEventLabel()} — test email`,
     `This is a test from the admin dashboard.\nIf you're reading it, automatic email is working.`
   );
   btn.disabled = false;
-  toast(ok ? `Test email sent to ${currentUserEmail} — check your inbox`
-           : "Test failed — check the URL, the token, and that the script is deployed to 'Anyone'", !ok);
+  if (r.ok) {
+    toast(`Test email sent to ${currentUserEmail} — check your inbox`);
+  } else {
+    // alert() so the full diagnostic is readable on a phone.
+    alert("Test email did not confirm.\n\n" + r.detail);
+  }
 });
 
 $("#scannerPrefsSaveBtn").addEventListener("click", async () => {
@@ -5793,13 +5828,14 @@ function openConfirmPay(r) {
           String(r.email).trim(),
           `${currentEventLabel()} — Registration confirmed, your race ticket`,
           confirmedMessageText(updated)
-        ).then(ok => {
-          if (ok) {
+        ).then(res => {
+          if (res.ok || res.blind) {
             updateDoc(regRef, {
               confirmedEmailSentAt: serverTimestamp(),
               confirmedEmailSentBy: "auto (" + (currentUserEmail || "admin") + ")"
             }).catch(() => {});
-            toast("Confirmation email sent automatically");
+            toast(res.ok ? "Confirmation email sent automatically"
+                         : "Confirmation email dispatched (unconfirmed by this browser)");
           } else {
             toast("Auto-email failed — use the manual Email button", true);
           }
