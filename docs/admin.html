@@ -771,13 +771,12 @@ Masters Men-Women 35-39 (1987-1991)
             <label>Extra charge in USD — optional</label>
             <input id="ffPrice" type="number" min="0" step="0.5" placeholder="e.g. 5">
             <p class="muted" style="font-size:.8rem;margin:6px 0 0">
-              Adds to the registration total. <strong>Checkbox</strong>: ticking it reveals a
-              "How many?" quantity box (default 1) and charges price × quantity — e.g.
-              "Bus from Batroun to Tannourine" at $5, family books 3 seats → $15. Type a
-              custom quantity question (e.g. <em>How many bus seats?</em>) in the
-              <strong>Options</strong> box above. <strong>Number</strong> field = plain
-              quantity × price. On group registrations the whole add-on lands on
-              Person&nbsp;1's amount.
+              Adds to the registration total. <strong>Checkbox</strong> = flat charge
+              <strong>per person</strong> — on group registrations every participant gets
+              their own checkbox and each ticked one adds the charge to that participant's
+              own registration (e.g. "Bus from Batroun to Tannourine" +$5: 5 people, 3 tick
+              it → $15 across their three registrations). <strong>Number</strong> field =
+              quantity × price, charged on Person&nbsp;1.
             </p>
           </div>
           <div></div>
@@ -1176,6 +1175,18 @@ See you at the start line!"></textarea>
         <div class="row two">
           <div><label>Race start time</label><input id="cpStartTime" type="time" placeholder="e.g. 07:00"></div>
           <div><label>Race location</label><input id="cpLocation" placeholder="Batroun"></div>
+        </div>
+        <div class="row two">
+          <div>
+            <label>Race location map link (optional)</label>
+            <input id="cpMapUrl" type="url" placeholder="https://maps.app.goo.gl/…">
+            <p class="muted" style="font-size:.8rem;margin:6px 0 0">
+              Paste a Google Maps share link (Maps app → the start-line spot →
+              Share → Copy link). The location on every runner's ticket becomes
+              tappable and opens this map.
+            </p>
+          </div>
+          <div></div>
         </div>
         <div class="row two">
           <div>
@@ -5250,6 +5261,11 @@ function buildTicketUrl(r) {
     teammate,
     comp:    COMPETITION_ID
   });
+  // Booked paid add-ons (bus seat etc.) — shown on the ticket with a check.
+  const extras = (r.addOns || [])
+    .map(a => (a.label || "") + ((a.qty || 1) > 1 ? ` x ${a.qty}` : ""))
+    .filter(Boolean).join(" | ");
+  if (extras) params.set("extras", extras);
   return `${TICKET_BASE_URL}?${params}`;
 }
 
@@ -6673,9 +6689,7 @@ $("#ffAddBtn").addEventListener("click", async () => {
   }
 
   const newField = { key, label, type, required };
-  // Options: dropdown choices — or, for a PRICED checkbox, the custom
-  // wording of its "How many?" quantity question (first entry).
-  if (type === "select" || (type === "checkbox" && price > 0 && opts.length)) newField.options = opts;
+  if (type === "select") newField.options = opts;
   if (price > 0) newField.price = price;
 
   // Editing: replace in place so the field keeps its position on the form.
@@ -7315,7 +7329,7 @@ $("#themeSaveBtn").addEventListener("click", async () => {
 let competitionDirty = false;
 
 function markCompetitionDirty() { competitionDirty = true; }
-["cpName","cpYear","cpOpens","cpCloses","cpRaceDay","cpStartTime","cpLocation","cpRefPrefix"].forEach(id => {
+["cpName","cpYear","cpOpens","cpCloses","cpRaceDay","cpStartTime","cpLocation","cpMapUrl","cpRefPrefix"].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener("input", markCompetitionDirty);
 });
@@ -7337,6 +7351,7 @@ function loadCompetitionIntoEditor(c) {
   $("#cpRaceDay").value = c.raceDay ? c.raceDay.slice(0,10) : "";
   $("#cpStartTime").value = c.raceStartTime || "";
   $("#cpLocation").value = c.raceLocation || "";
+  $("#cpMapUrl").value = c.raceLocationMapUrl || "";
   $("#cpRefPrefix").value = c.refPrefix || "";
 }
 
@@ -7381,6 +7396,10 @@ $("#competitionSaveBtn").addEventListener("click", async () => {
     raceDay: $("#cpRaceDay").value || null,
     raceStartTime: $("#cpStartTime").value || null,
     raceLocation: $("#cpLocation").value.trim() || null,
+    raceLocationMapUrl: (() => {
+      const u = $("#cpMapUrl").value.trim();
+      return /^https?:\/\//i.test(u) ? u : null;
+    })(),
     refPrefix: $("#cpRefPrefix").value.trim().replace(/-+$/, "") || null
   };
 
