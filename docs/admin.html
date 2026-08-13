@@ -5551,14 +5551,20 @@ function openConfirmPay(r) {
   const priceFree = (r.priceUSD || 0) === 0;
   const hasPhone = !!String(r.phone || "").replace(/\D/g, "");
   const hasEmail = !!String(r.email || "").trim();
-  const next = nextBibFor(r.categoryId);
+  // A registration that still holds a bib keeps it; otherwise preview the
+  // lowest free number in the category's range.
+  const existingBib = Number(r.bibNumber) || null;
+  const next = existingBib
+    ? { bib: existingBib, existing: true,
+        color: cats.find(c => c.id === r.categoryId)?.bibColor || null }
+    : nextBibFor(r.categoryId);
   const autoOk = !next.error;
   const bibSwatch = autoOk && next.color
     ? `<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${escapeHtml(next.color)};vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,.35)" title="Category bib colour"></span>`
     : "";
   const bibBlock = autoOk
     ? `<p style="margin-top:14px">Bib to assign: ${bibSwatch}<strong style="font-size:1.2rem;color:${escapeHtml(next.color || "var(--accent)")}">${next.bib}</strong>
-         <span class="muted" style="margin-left:8px;font-size:.85rem">(from range ${next.start}–${next.end})</span>
+         <span class="muted" style="margin-left:8px;font-size:.85rem">${next.existing ? "(already reserved for this registration — kept)" : `(from range ${next.start}–${next.end})`}</span>
          ${r.teammate ? `<br><span class="muted" style="font-size:.85rem">Relay team — Person 2 (${escapeHtml((r.teammate.firstName || "") + " " + (r.teammate.lastName || "")).trim()}) shares this bib.</span>` : ""}
        </p>`
     : `<div style="margin-top:14px;padding:10px 12px;background:rgba(255,153,51,.12);border:1px solid rgba(255,153,51,.5);border-radius:10px;color:#ffd28a;font-size:.9rem">
@@ -5625,9 +5631,10 @@ function openConfirmPay(r) {
         const regSnap = await tx.get(regRef);
         if (!regSnap.exists()) throw new Error("Registration not found.");
         const reg = regSnap.data();
-        if (reg.bibNumber) throw new Error(`This registration already has bib ${reg.bibNumber}.`);
 
-        let bib = manualBib;
+        // A registration that still holds a bib (e.g. edited back to pending
+        // without clearing the number) simply keeps it on re-confirm.
+        let bib = Number(reg.bibNumber) || manualBib;
         if (bib == null) {
           const catSnap = await tx.get(catRef);
           if (!catSnap.exists()) throw new Error("Category not found.");
@@ -5967,6 +5974,15 @@ function openParticipantEditor(r) {
   }
   $("#pe_cat").addEventListener("change", refreshTeammate);
   refreshTeammate();
+
+  // Flipping status back to "pending" frees the bib: clear the field so the
+  // number returns to the pool (the admin can retype it to keep it reserved).
+  $("#pe_status").addEventListener("change", () => {
+    if ($("#pe_status").value === "pending" && $("#pe_bib").value) {
+      $("#pe_bib").value = "";
+      toast("Bib cleared — it returns to the pool. Type it back to keep it reserved.");
+    }
+  });
 
   $("#peCancel").onclick = closeModal;
   $("#peSave").onclick = async () => {
