@@ -998,13 +998,16 @@ const db = getFirestore(app);
 // dashboard. Cached in localStorage so repeat visits cost zero extra reads.
 // Falls back to the last shipped id if the registry doc doesn't exist yet.
 let COMPETITION_ID = "batroun-race-2026";
+// ?fresh=1 skips every local cache (admin testing aid — see the changes you
+// just made in the dashboard immediately, instead of waiting out the TTL).
+const FORCE_FRESH = new URLSearchParams(location.search).has("fresh");
 const ACTIVE_COMP_CACHE_KEY = "br-active-comp-v1";
 const ACTIVE_COMP_CACHE_TTL_MS = 10 * 60 * 1000;
 try {
   let cachedActive = null;
   try {
     const raw = JSON.parse(localStorage.getItem(ACTIVE_COMP_CACHE_KEY) || "null");
-    if (raw && raw.t && (Date.now() - raw.t) < ACTIVE_COMP_CACHE_TTL_MS && raw.id) cachedActive = raw.id;
+    if (!FORCE_FRESH && raw && raw.t && (Date.now() - raw.t) < ACTIVE_COMP_CACHE_TTL_MS && raw.id) cachedActive = raw.id;
   } catch (_) {}
   if (cachedActive) {
     COMPETITION_ID = cachedActive;
@@ -2561,6 +2564,7 @@ const CONFIG_CACHE_KEY = "br-config-" + COMPETITION_ID + "-v1";
 const CONFIG_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function readConfigCache() {
+  if (FORCE_FRESH) return null;   // ?fresh=1 → always fetch live config
   try {
     const raw = localStorage.getItem(CONFIG_CACHE_KEY);
     if (!raw) return null;
