@@ -677,6 +677,9 @@
           <label for="note">Medical / notes<span class="req-star" hidden> *</span></label>
           <textarea id="note" name="note" rows="3" placeholder="Allergies, conditions, medication…"></textarea>
         </div>
+        <!-- Person 1's priced add-ons (bus seats etc.) — rendered by
+             renderAddOnRows(), mirroring the per-participant sections. -->
+        <div id="p1AddOns"></div>
       </div>
 
       <!-- Extra participants (rendered when multi-participant is enabled and count > 1) -->
@@ -2290,12 +2293,13 @@ function renderCustomFields() {
     return `<div class="row"><label for="${id}">${safeLabel}${reqStar}</label>${control}</div>`;
   }).join("");
 
-  // Per-person priced checkboxes (bus seat etc.) live in their own block at
-  // the end of the card — one row per participant when a group is selected.
-  wrap.insertAdjacentHTML("beforeend", `<div id="addOnRows"></div>`);
   renderAddOnRows();
 
-  card.style.display = "";
+  // The card holds only the non-priced custom fields — priced checkboxes
+  // render inside Person 1's "Race extras" card (and each participant's
+  // block). Hide the card when nothing else remains.
+  const hasPlainFields = CUSTOM_FIELDS.some(f => !(f.type === "checkbox" && (Number(f.price) || 0) > 0));
+  card.style.display = hasPlainFields ? "" : "none";
   // Priced NUMBER fields refresh the price display live as they're edited.
   CUSTOM_FIELDS.filter(f => f.type === "number" && (Number(f.price) || 0) > 0).forEach(f => {
     const el = document.getElementById("cf_" + f.key);
@@ -2305,14 +2309,14 @@ function renderCustomFields() {
   initFieldErrors();
 }
 
-// Person 1's priced checkboxes live in the custom-fields card
-// ("Transportation"); each EXTRA participant gets their own copy inside
-// their block under a matching mini-heading (see renderExtraParticipants),
-// so a 10-person group doesn't produce one giant checkbox list. Element
+// Person 1's priced checkboxes render at the end of THEIR "Race extras"
+// card (#p1AddOns) under the admin's section title — mirroring the
+// per-participant sections each extra participant gets in their block —
+// so every person's transportation sits inside their own section. Element
 // ids stay cf_<key> (Person 1) and p<n>_cf_<key> (Person n), which is
 // what the pricing + submit code reads.
 function renderAddOnRows() {
-  const box = document.getElementById("addOnRows");
+  const box = document.getElementById("p1AddOns");
   if (!box) return;
   const fields = pricedCheckboxFields();
   if (!fields.length) { box.innerHTML = ""; return; }
@@ -2325,12 +2329,15 @@ function renderAddOnRows() {
   const prev = {};
   box.querySelectorAll("input[type=checkbox]").forEach(el => { prev[el.id] = el.checked; });
 
-  box.innerHTML = fields.map(f => `
-    <div class="row"><label class="inline">
-      <input type="checkbox" id="cf_${f.key}">
-      <span>${escHtml(f.label)} <span style="color:var(--accent);font-weight:700">(+$${f.price})</span>${
-        N > 1 ? ` <span class="muted" style="font-weight:600">— Person 1 (you)</span>` : ""
-      }</span></label></div>`).join("");
+  box.innerHTML = `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+      <div style="font-weight:800;font-size:.92rem;margin-bottom:6px;color:var(--accent)">${escHtml(CUSTOM_SECTION_TITLE)}${N > 1 ? " — Person 1 (you)" : ""}</div>
+      ${fields.map(f => `
+      <div class="row" style="margin:4px 0"><label class="inline">
+        <input type="checkbox" id="cf_${f.key}">
+        <span>${escHtml(f.label)} <span style="color:var(--accent);font-weight:700">(+$${f.price})</span></span>
+      </label></div>`).join("")}
+    </div>`;
 
   box.querySelectorAll("input[type=checkbox]").forEach(el => {
     if (el.id in prev) el.checked = prev[el.id];
