@@ -99,7 +99,7 @@ You see all tabs in the admin nav:
 ### Customizing the registration form
 - **Categories tab** → Add a race. If you want an age-bracket dropdown like the 10K/5K examples, expand "Optional extra dropdown" and either click one of the preset buttons or paste your own options.
 - **Form fields tab** → Add fields like *T-shirt color* (text/number/checkbox/dropdown). They appear automatically on the public form below the standard fields.
-- **Paid add-ons**: give a Checkbox or Number field an **Extra charge (USD)** to sell options like a bus seat. A priced checkbox ("Bus from Batroun to Tannourine" +$5) reveals a *How many?* box when ticked — default 1, so a family of 3 sets it to 3 and pays $15. (Tip: type your own quantity question, e.g. *How many bus seats?*, in the field's Options box.) The charge is added to the registration total, shown in the price breakdown, and included in the Whish amount; the booked quantity is saved on the registration. On group registrations, Person 1's amount carries the add-ons.
+- **Paid add-ons**: give a Checkbox or Number field an **Extra charge (USD)** to sell options like a bus seat. A priced checkbox ("Bus from Batroun to Tannourine" +$5) charges **per person**: when someone registers several participants under one mobile, every participant gets their own checkbox, and each ticked one adds the charge to that participant's own registration. The total (registrations + add-ons) is shown in the price breakdown and included in the Whish amount, and each registration records whether that person took the option — so counting bus riders is just counting ticks.
 
 ### Customizing the look
 - **Theme & copy tab**:
