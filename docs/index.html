@@ -23,6 +23,15 @@
     if (t.ink)     r.setProperty("--ink",     t.ink);
     if (t.bg1)     r.setProperty("--bg1",     t.bg1);
     if (t.bg2)     r.setProperty("--bg2",     t.bg2);
+    function rgba(hex, a) {
+      var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+      if (!m) return null;
+      var n = parseInt(m[1], 16);
+      return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+    }
+    var o1 = rgba(t.bg1, 0.88), o2 = rgba(t.bg2, 0.94);
+    if (o1) r.setProperty("--bg-overlay1", o1);
+    if (o2) r.setProperty("--bg-overlay2", o2);
   } catch (e) {}
 })();
 </script>
@@ -42,8 +51,11 @@
     -webkit-font-smoothing:antialiased}
   h1,h2,h3,.title{font-family:'Bricolage Grotesque','Instrument Sans',sans-serif}
   body.has-bg-image{
+    /* The darkening overlay follows the THEME's background colors (set as
+       rgba by applyTheme + the pre-paint script), so a green theme tints
+       the photo green, not the old hardcoded navy. */
     background:
-      linear-gradient(180deg, rgba(3,15,43,.88), rgba(10,30,69,.94)),
+      linear-gradient(180deg, var(--bg-overlay1, rgba(3,15,43,.88)), var(--bg-overlay2, rgba(10,30,69,.94))),
       var(--bg-image) center/cover fixed no-repeat
   }
   *{box-sizing:border-box;max-width:100%}
@@ -2465,6 +2477,18 @@ function applyTheme(t) {
   if (t.ink)      root.setProperty("--ink", t.ink);
   if (t.bg1)      root.setProperty("--bg1", t.bg1);
   if (t.bg2)      root.setProperty("--bg2", t.bg2);
+
+  // The photo-darkening overlay follows the theme's background colors, so
+  // a green theme tints the background image green (not the built-in navy).
+  const hexToRgba = (hex, a) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  };
+  const ov1 = hexToRgba(t.bg1, 0.88), ov2 = hexToRgba(t.bg2, 0.94);
+  if (ov1) root.setProperty("--bg-overlay1", ov1);
+  if (ov2) root.setProperty("--bg-overlay2", ov2);
 
   // No automatic default photo — the page is clean unless the admin uploads one.
   // Only accept http(s):, data:, or relative paths. Strip any quote characters
