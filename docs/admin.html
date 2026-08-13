@@ -838,13 +838,15 @@ Masters Men-Women 35-39 (1987-1991)
             </div>
           </div>
         </div>
-        <div style="margin-top:12px">
-          <button id="thBrandPresetBtn" class="btn sec">Apply batrounrace.com brand colors</button>
-          <p class="muted" style="font-size:.8rem;margin:6px 0 0">
-            Fills the five colors with the main website's palette (navy + sun orange).
-            Review, then press <strong>Save theme</strong> below.
-          </p>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="thBrandPresetBtn" class="btn sec">Brand colors (navy + orange)</button>
+          <button id="thCoastalPresetBtn" class="btn sec">Coastal colors (green + coral)</button>
         </div>
+        <p class="muted" style="font-size:.8rem;margin:6px 0 0">
+          One-tap presets from batrounrace.com — <strong>Brand</strong> is the site's
+          default navy + sun orange; <strong>Coastal</strong> is its alternate petrol
+          green + coral. Review, then press <strong>Save theme</strong> below.
+        </p>
       </div>
 
       <div class="card">
@@ -6799,18 +6801,24 @@ THEME_COLOR_IDS.forEach(id => {
   });
 });
 
-// One-tap preset: the batrounrace.com palette (navy + sun orange).
-const BRAND_THEME_COLORS = {
+// One-tap presets: the two batrounrace.com palettes.
+const BRAND_THEME_COLORS = {   // site default — navy + sun orange
   thAccent: "#F7A00A", thAccent2: "#DE8E05", thInk: "#F4F7FC",
   thBg1: "#030F2B", thBg2: "#0A1E45"
 };
-$("#thBrandPresetBtn")?.addEventListener("click", () => {
-  Object.entries(BRAND_THEME_COLORS).forEach(([id, v]) => {
+const COASTAL_THEME_COLORS = { // site alternate — petrol green + coral
+  thAccent: "#FF4D2E", thAccent2: "#E03A1D", thInk: "#F2F7F6",
+  thBg1: "#082A2E", thBg2: "#0F3A3F"
+};
+function applyThemePreset(colors, label) {
+  Object.entries(colors).forEach(([id, v]) => {
     const p = $("#" + id); if (p) p.value = v;
   });
   syncColorTextTwins();
-  toast("Brand colors applied — press Save theme to publish");
-});
+  toast(label + " applied — press Save theme to publish");
+}
+$("#thBrandPresetBtn")?.addEventListener("click", () => applyThemePreset(BRAND_THEME_COLORS, "Brand colors"));
+$("#thCoastalPresetBtn")?.addEventListener("click", () => applyThemePreset(COASTAL_THEME_COLORS, "Coastal colors"));
 
 function loadThemeIntoEditor(t) {
   $("#thAccent").value   = t.accent   || "#27cbbb";
