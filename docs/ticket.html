@@ -126,7 +126,7 @@
      column, the ticket becomes a wide card with the QR + codes on the
      left and all the details on the right, so everything fits without
      scrolling (and on one PDF page). */
-  @media (min-width:700px), print{
+  @media (min-width:640px), print{
     .page{max-width:920px}
     .ticket-body{display:grid;grid-template-columns:300px 1fr;gap:2px 26px;align-items:start}
     .ticket-body > .qr-row{grid-column:1;grid-row:1 / span 8;
@@ -134,6 +134,19 @@
     .ticket-body > .grid{grid-column:2;margin:8px 0 2px}
     .ticket-body > .stub{grid-column:2;margin-top:12px}
     .qr-side{text-align:center;max-width:none;width:100%}
+  }
+
+  /* Same wide layout, forced by class while the Download-PDF snapshot is
+     taken — so the generated PDF is ALWAYS the landscape ticket, even when
+     the user is on a portrait phone showing the stacked view. */
+  body.pdf-mode .ticket-body{display:grid;grid-template-columns:300px 1fr;gap:2px 26px;align-items:start}
+  body.pdf-mode .ticket-body > .qr-row{grid-column:1;grid-row:1 / span 8;
+                                       flex-direction:column;justify-content:flex-start;gap:12px}
+  body.pdf-mode .ticket-body > .grid{grid-column:2;margin:8px 0 2px}
+  body.pdf-mode .ticket-body > .stub{grid-column:2;margin-top:12px}
+  body.pdf-mode .qr-side{text-align:center;max-width:none;width:100%}
+  body.pdf-mode .qr-card > div, body.pdf-mode .qr-card canvas, body.pdf-mode .qr-card img{
+    width:220px!important;height:220px!important
   }
 
   /* Mobile-tuned spacing & layout — applies to most phones. Compact
@@ -175,7 +188,7 @@
 <body>
 <main class="page">
   <div class="toolbar">
-    <button class="btn sec" onclick="window.print()">Save as PDF / Print</button>
+    <button class="btn sec" id="pdfBtn" onclick="downloadTicketPdf(this)">Download PDF</button>
   </div>
 
   <article class="ticket" id="ticket">
@@ -236,6 +249,51 @@
 </main>
 
 <script>
+// ===== Download PDF =====
+// Generates a real PDF file in the page (html2pdf = html2canvas + jsPDF,
+// lazy-loaded from cdnjs on first tap) instead of relying on
+// window.print(), which fails in many mobile / in-app browsers (WhatsApp).
+// The snapshot is taken with the WIDE layout forced (body.pdf-mode +
+// fixed 1000px ticket width), so the PDF is always the landscape ticket
+// on a single A4-landscape page, whatever the screen. Falls back to the
+// print dialog if the library can't load (e.g. offline).
+async function downloadTicketPdf(btn) {
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Preparing PDF…";
+  const ticket = document.getElementById("ticket");
+  const prevWidth = ticket ? ticket.style.width : "";
+  try {
+    if (!window.html2pdf) {
+      await new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+        s.onload = res;
+        s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    document.body.classList.add("pdf-mode");
+    ticket.style.width = "1000px";
+    const refName = (new URLSearchParams(location.search)).get("ref") || "ticket";
+    await html2pdf().set({
+      margin: 8,
+      filename: "race-ticket-" + refName + ".pdf",
+      image: { type: "jpeg", quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+      jsPDF: { unit: "mm", format: "a4", orientation: "landscape" }
+    }).from(ticket).save();
+  } catch (e) {
+    console.warn("PDF generation failed, falling back to print dialog:", e);
+    try { window.print(); } catch (_) {}
+  } finally {
+    if (ticket) ticket.style.width = prevWidth;
+    document.body.classList.remove("pdf-mode");
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
 const params = new URLSearchParams(location.search);
 const get = (k) => (params.get(k) || "").trim();
 
