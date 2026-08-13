@@ -1914,10 +1914,12 @@ function toggleParticipantCount(show) {
     participantCountSel.value = "1";
     renderExtraParticipants(1);
   }
+  renderAddOnRows();
 }
 
 participantCountSel.addEventListener("change", () => {
   renderExtraParticipants(parseInt(participantCountSel.value, 10) || 1);
+  renderAddOnRows();   // one bus checkbox per participant in the extras card
 });
 
 function multiCatOptions(selectedId) {
@@ -2005,11 +2007,6 @@ function renderExtraParticipants(count) {
             </select>
           </div>
         </div>
-        ${pricedCheckboxFields().map(f => `
-        <div class="row"><label class="inline">
-          <input type="checkbox" id="${p}cf_${f.key}">
-          <span>${escHtml(f.label)} <span style="color:var(--accent);font-weight:700">(+$${f.price})</span></span>
-        </label></div>`).join("")}
       </div>`);
   }
   extraContainer.innerHTML = cards.join("");
@@ -2029,10 +2026,6 @@ function renderExtraParticipants(count) {
     const dobEl = document.getElementById(`p${n}_dob`);
     if (catEl) catEl.addEventListener("change", () => { recomputeMultiTotal(); renderParticipantSubQ(n); });
     if (dobEl) dobEl.addEventListener("change", () => renderParticipantSubQ(n));
-    // This participant's own priced add-ons (bus seat etc.) update the total.
-    pricedCheckboxFields().forEach(f => {
-      document.getElementById(`p${n}_cf_${f.key}`)?.addEventListener("change", recomputeMultiTotal);
-    });
     // Single-category event: preselect it here too (the main dropdown is hidden).
     if (catEl && !catEl.value && catIds.length === 1) {
       catEl.value = catIds[0];
@@ -2083,12 +2076,6 @@ function recomputeMultiTotal() {
   const breakdown = document.getElementById("multiBreakdown");
   const N = parseInt(participantCountSel.value, 10) || 1;
   const leadCat = CATEGORIES[catSelect.value];
-
-  // Clarify whose checkbox the main-card add-ons are once a group is chosen.
-  pricedCheckboxFields().forEach(f => {
-    const who = document.getElementById("cf_" + f.key + "_who");
-    if (who) who.hidden = N <= 1;
-  });
 
   if (N <= 1 || !leadCat) {
     breakdown.hidden = true;
@@ -2272,15 +2259,12 @@ function renderCustomFields() {
     if (f.type === "textarea") {
       control = `<textarea id="${id}" name="${id}" rows="3" ${req}></textarea>`;
     } else if (f.type === "checkbox") {
-      // Priced checkbox = flat per-person charge. In group registrations,
-      // each extra participant gets their own copy inside their block; the
-      // one here belongs to Person 1 — the "— for Person 1" tag appears
-      // only when more than one participant is selected.
-      const whoTag = price > 0
-        ? `<span id="${id}_who" class="muted" hidden style="font-weight:600"> — for Person 1</span>` : "";
+      // PRICED checkboxes are per-person and rendered separately below
+      // (one row per participant) — skip them in this pass.
+      if (price > 0) return "";
       return `<div class="row"><label class="inline">
         <input type="checkbox" id="${id}" name="${id}" ${req}>
-        <span>${safeLabel}${reqStar}${whoTag}</span></label></div>`;
+        <span>${safeLabel}${reqStar}</span></label></div>`;
     } else if (f.type === "select") {
       const opts = '<option value="">Select…</option>' +
         (f.options || []).map(o => `<option>${String(o).replace(/</g,"&lt;")}</option>`).join("");
@@ -2293,14 +2277,61 @@ function renderCustomFields() {
     return `<div class="row"><label for="${id}">${safeLabel}${reqStar}</label>${control}</div>`;
   }).join("");
 
+  // Per-person priced checkboxes (bus seat etc.) live in their own block at
+  // the end of the card — one row per participant when a group is selected.
+  wrap.insertAdjacentHTML("beforeend", `<div id="addOnRows"></div>`);
+  renderAddOnRows();
+
   card.style.display = "";
-  // Priced add-ons refresh the price display live as they're (un)ticked.
-  CUSTOM_FIELDS.filter(f => (Number(f.price) || 0) > 0).forEach(f => {
+  // Priced NUMBER fields refresh the price display live as they're edited.
+  CUSTOM_FIELDS.filter(f => f.type === "number" && (Number(f.price) || 0) > 0).forEach(f => {
     const el = document.getElementById("cf_" + f.key);
-    if (el) el.addEventListener(f.type === "checkbox" ? "change" : "input", refreshPriceDisplay);
+    if (el) el.addEventListener("input", refreshPriceDisplay);
   });
   // Re-run validation setup so the new fields get error spans + clear-on-input
   initFieldErrors();
+}
+
+// One checkbox PER PARTICIPANT for each priced checkbox field, all grouped
+// in the custom-fields card ("Transportation") — so choosing who takes the
+// bus happens in one obvious place instead of scattered across the form.
+// Element ids stay cf_<key> (Person 1) and p<n>_cf_<key> (Person n), which
+// is what the pricing + submit code reads.
+function renderAddOnRows() {
+  const box = document.getElementById("addOnRows");
+  if (!box) return;
+  const fields = pricedCheckboxFields();
+  if (!fields.length) { box.innerHTML = ""; return; }
+
+  // Effective participant count (1 unless the multi selector is visible).
+  const N = (!participantCountWrap || participantCountWrap.hidden)
+    ? 1 : (parseInt(participantCountSel.value, 10) || 1);
+
+  // Preserve current ticks across re-renders (participant count changes).
+  const prev = {};
+  box.querySelectorAll("input[type=checkbox]").forEach(el => { prev[el.id] = el.checked; });
+
+  box.innerHTML = fields.map(f => {
+    const tag = `<span style="color:var(--accent);font-weight:700">(+$${f.price})</span>`;
+    if (N <= 1) {
+      return `<div class="row"><label class="inline">
+        <input type="checkbox" id="cf_${f.key}">
+        <span>${escHtml(f.label)} ${tag}</span></label></div>`;
+    }
+    const rows = [];
+    for (let n = 1; n <= N; n++) {
+      const id = n === 1 ? `cf_${f.key}` : `p${n}_cf_${f.key}`;
+      rows.push(`<div class="row" style="margin:2px 0"><label class="inline">
+        <input type="checkbox" id="${id}">
+        <span><strong>Person ${n}${n === 1 ? " (you)" : ""}</strong> — ${escHtml(f.label)} ${tag}</span></label></div>`);
+    }
+    return rows.join("");
+  }).join("");
+
+  box.querySelectorAll("input[type=checkbox]").forEach(el => {
+    if (el.id in prev) el.checked = prev[el.id];
+    el.addEventListener("change", refreshPriceDisplay);
+  });
 }
 
 function collectCustomValues() {
