@@ -5249,6 +5249,11 @@ function buildTicketUrl(r) {
     teammate,
     comp:    COMPETITION_ID
   });
+  // Booked paid add-ons (bus seat etc.) — shown on the ticket with a check.
+  const extras = (r.addOns || [])
+    .map(a => (a.label || "") + ((a.qty || 1) > 1 ? ` x ${a.qty}` : ""))
+    .filter(Boolean).join(" | ");
+  if (extras) params.set("extras", extras);
   return `${TICKET_BASE_URL}?${params}`;
 }
 

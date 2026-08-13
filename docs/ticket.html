@@ -185,6 +185,11 @@
       <div class="grid">
         <div class="full"><label>Location</label><div class="v" id="loc">Batroun</div></div>
       </div>
+      <!-- Booked paid add-ons (bus seat etc.) — hidden unless the ticket
+           link carries extras. Each item renders with a check mark. -->
+      <div class="grid" id="extrasGrid" hidden>
+        <div class="full"><label>Extras</label><div class="v" id="extras">—</div></div>
+      </div>
 
       <div class="stub">
         <div><strong>Status:</strong> <span id="status">Confirmed</span></div>
@@ -263,6 +268,20 @@ renderColor(color);
 if (status) {
   const s = status.toLowerCase();
   set("status", s === "free" ? "Free entry (confirmed)" : s === "paid" ? "Paid · Confirmed" : status);
+}
+
+// Booked extras (e.g. "Bus from Batroun to Tannourine") — one line each,
+// with a check mark. Hidden entirely when the registration has none.
+const extras = get("extras");
+if (extras) {
+  const grid = document.getElementById("extrasGrid");
+  const el = document.getElementById("extras");
+  const items = extras.split("|").map(s => s.trim()).filter(Boolean);
+  if (grid && el && items.length) {
+    const escT = s => s.replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+    el.innerHTML = items.map(i => "✓ " + escT(i)).join("<br>");
+    grid.hidden = false;
+  }
 }
 
 if (name) document.getElementById("subName").textContent = name + " — show this at pickup";
