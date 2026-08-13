@@ -1340,6 +1340,41 @@ See you at the start line!"></textarea>
       </div>
 
       <div class="card admin-only">
+        <h2>Automatic email</h2>
+        <p class="muted" style="margin:0 0 12px">
+          Send emails automatically from your Gmail via a Google Apps Script —
+          free, no server. One-time setup: see <strong>EMAIL-SETUP.md</strong>
+          in the repo (5 minutes). WhatsApp stays one-tap by design.
+        </p>
+        <div class="row two">
+          <div>
+            <label>Web app URL (script.google.com/…/exec)</label>
+            <input id="emWebhookUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" style="font-family:ui-monospace,Menlo,monospace">
+          </div>
+          <div>
+            <label>Secret token (same as in the script)</label>
+            <input id="emToken" type="text" autocomplete="off" style="font-family:ui-monospace,Menlo,monospace">
+          </div>
+        </div>
+        <label class="inline" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px">
+          <input type="checkbox" id="emAutoPending">
+          <span>Auto-send the <strong>payment-request email</strong> right after a runner registers</span>
+        </label>
+        <label class="inline" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px">
+          <input type="checkbox" id="emAutoConfirmed">
+          <span>Auto-send the <strong>confirmation + ticket email</strong> when you confirm a payment</span>
+        </label>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="emSaveBtn" class="btn">Save</button>
+          <button id="emTestBtn" class="btn sec">Send test email</button>
+        </div>
+        <p class="muted" style="font-size:.8rem;margin-top:10px">
+          Uses the same templates as WhatsApp (Theme &amp; copy). Free Gmail
+          sends ~100 emails/day; the manual buttons keep working as fallback.
+        </p>
+      </div>
+
+      <div class="card admin-only">
         <h2>Public results page</h2>
         <p class="muted" style="margin:0 0 12px">
           Publish the <strong>Result</strong> standings to a public page anyone can open — no login.
@@ -2260,6 +2295,81 @@ onSnapshot(
   },
   err => console.warn("[scanner] config listener:", err.message)
 );
+
+// ===== Automatic email (Apps Script webhook) =====
+// Config lives in /config/email; the PUBLIC page reads it too (auto
+// payment-request email on registration). See EMAIL-SETUP.md.
+let emailCfg = {};
+onSnapshot(
+  doc(db, "competitions", COMPETITION_ID, "config", "email"),
+  snap => {
+    emailCfg = snap.exists() ? snap.data() : {};
+    // Populate the Settings inputs unless the admin is mid-typing.
+    [["emWebhookUrl", "webhookUrl"], ["emToken", "token"]].forEach(([id, key]) => {
+      const el = document.getElementById(id);
+      if (el && document.activeElement !== el) el.value = emailCfg[key] || "";
+    });
+    const p = document.getElementById("emAutoPending");
+    if (p) p.checked = !!emailCfg.autoPending;
+    const c = document.getElementById("emAutoConfirmed");
+    if (c) c.checked = !!emailCfg.autoConfirmed;
+  },
+  err => console.warn("[email] config listener:", err.message)
+);
+
+async function sendWebhookEmail(to, subject, body) {
+  try {
+    if (!/^https:\/\/script\.google\.com\//.test(emailCfg.webhookUrl || "")) return false;
+    const res = await fetch(emailCfg.webhookUrl, {
+      method: "POST",
+      // text/plain = simple CORS request (Apps Script answers no preflight)
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        token: emailCfg.token || "",
+        to, subject, body,
+        fromName: currentEventLabel()
+      })
+    });
+    const j = await res.json().catch(() => null);
+    if (j && !j.ok) console.warn("[email] webhook refused:", j.error);
+    return !!(j && j.ok);
+  } catch (e) {
+    console.warn("[email] webhook send failed:", e?.message);
+    return false;
+  }
+}
+
+document.getElementById("emSaveBtn")?.addEventListener("click", async () => {
+  const url = document.getElementById("emWebhookUrl").value.trim();
+  if (url && !/^https:\/\/script\.google\.com\//.test(url)) {
+    toast("The webhook URL must be a script.google.com web-app URL", true);
+    return;
+  }
+  try {
+    await setDoc(doc(db, "competitions", COMPETITION_ID, "config", "email"), {
+      webhookUrl: url || null,
+      token: document.getElementById("emToken").value.trim() || null,
+      autoPending: document.getElementById("emAutoPending").checked,
+      autoConfirmed: document.getElementById("emAutoConfirmed").checked,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUserEmail || "unknown"
+    }, { merge: true });
+    toast("Automatic email settings saved");
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById("emTestBtn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("emTestBtn");
+  btn.disabled = true;
+  const ok = await sendWebhookEmail(
+    currentUserEmail,
+    `${currentEventLabel()} — test email`,
+    `This is a test from the admin dashboard.\nIf you're reading it, automatic email is working.`
+  );
+  btn.disabled = false;
+  toast(ok ? `Test email sent to ${currentUserEmail} — check your inbox`
+           : "Test failed — check the URL, the token, and that the script is deployed to 'Anyone'", !ok);
+});
 
 $("#scannerPrefsSaveBtn").addEventListener("click", async () => {
   const picked = [...document.querySelectorAll('[data-pref="scanner"]')]
@@ -5675,8 +5785,27 @@ function openConfirmPay(r) {
       });
       closeModal();
       toast((priceFree ? "Free entry confirmed — bib " : "Payment confirmed — bib ") + assignedBib + " assigned");
+      const updated = { ...r, bibNumber: assignedBib, paymentStatus: priceFree ? "free" : "paid" };
+      // Automatic confirmation email (Settings → Automatic email) — sends in
+      // the background with the same template; stamps the ✓ on success.
+      if (emailCfg.autoConfirmed && emailCfg.webhookUrl && String(r.email || "").trim()) {
+        sendWebhookEmail(
+          String(r.email).trim(),
+          `${currentEventLabel()} — Registration confirmed, your race ticket`,
+          confirmedMessageText(updated)
+        ).then(ok => {
+          if (ok) {
+            updateDoc(regRef, {
+              confirmedEmailSentAt: serverTimestamp(),
+              confirmedEmailSentBy: "auto (" + (currentUserEmail || "admin") + ")"
+            }).catch(() => {});
+            toast("Confirmation email sent automatically");
+          } else {
+            toast("Auto-email failed — use the manual Email button", true);
+          }
+        });
+      }
       if (sendVia !== "none") {
-        const updated = { ...r, bibNumber: assignedBib, paymentStatus: priceFree ? "free" : "paid" };
         if (sendVia === "email") {
           sendEmail(updated, "confirmed");
         } else {

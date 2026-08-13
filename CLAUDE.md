@@ -102,6 +102,7 @@ competitions/{competitionId}/config/{configId}   // public read except /access
   ├─ form:       { fields: [{ key, label, type, required, options, price }], sectionTitle }   // extra public-form fields; price (optional, USD) makes a checkbox a flat PER-PERSON add-on (each group participant gets their own checkbox, charged on their own doc) or a number field a per-unit charge on Person 1 — added to priceUSD. sectionTitle renames the public card (default "Additional info")
   ├─ publicForm: { builtIn: { <key>: { visible, required, label, deleted } }, includes: [string] }   // toggles + label overrides for built-in fields (email, gender, nationality, country, city, tshirt, blood, club, note, emergency) and the "Registration includes" list shown on the price card
   ├─ scanner:    { fields: [...] }    // which fields the hostess scanner shows
+  ├─ email:      { webhookUrl, token, autoPending, autoConfirmed }   // Apps Script auto-email webhook (see EMAIL-SETUP.md); public read — the registration page auto-sends the payment-request email itself
   └─ access:     { admins: [email], viewers: [email], scanners: [email] }   // authenticated read only
 
 competitions/{competitionId}/registrations/{regId}    // doc ID = normalizePhone(phone)
@@ -247,6 +248,7 @@ If multiple commits land in one session, keep updating the same PR rather than o
 - ✅ Race-day scanner (scan.html) with camera + manual fallback + admin-customizable result card fields + check-in tracking
 - ✅ Two-tier access: super admins hardcoded, additional admins + staff dynamic via Firestore
 - ✅ Codespaces devcontainer for cloud development
+- ✅ Automatic email via Google Apps Script webhook (free, sender's own Gmail): payment-request email on registration + confirmation email on Confirm, admin Settings card with test button, EMAIL-SETUP.md guide, tools/email-webhook.gs. WhatsApp remains one-tap by design.
 - ✅ Multi-competition support: `/competitions/_app` registry, admin header dropdown to browse any event, Settings → Competitions to create (with copy-setup) and set the active event, per-competition Whish `refPrefix`, global staff-access doc, public results event dropdown, `comp=` param on ticket/scanner links
 
 ## Open ideas (not yet built)
