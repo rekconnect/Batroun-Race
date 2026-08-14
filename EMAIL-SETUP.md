@@ -48,6 +48,11 @@ policy limit, not ours.
   can burn the quota in one go. On a heavy promo day, the manual email
   button still works as a fallback.
 - An email-only **signature** is set in the script (the `SIGNATURE` constant) — Gmail's saved signature is NOT applied by Apps Script. Edit it there; WhatsApp is unaffected.
+- Emails go out as **HTML** (clickable links) with the **event logo** embedded
+  above the signature — the image at `LOGO_URL` in the script
+  (`/marketing/email-logo.png` on the registration site). Set `LOGO_URL = ""`
+  to go back to plain text. A plain-text copy is always included for clients
+  that block HTML.
 - The email texts are the same templates as WhatsApp (admin → Theme & copy),
   with all placeholders (`{name}`, `{ref}`, `{link}`, `{bib}`, `{ticket}`,
   `{event}`, …) resolved.
