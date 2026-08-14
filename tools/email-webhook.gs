@@ -79,6 +79,23 @@ function htmlBody_(body, withLogo) {
     'line-height:1.55;color:#1a1a1a">' + main + logo + sig + "</div>";
 }
 
+// Run this ONCE from the editor (select "authorize" in the function
+// dropdown, press Run) after pasting new code: it touches every permission
+// the script needs — sending mail, reading your address (bounce report),
+// and fetching the logo — so Google shows ONE consent prompt covering all
+// of them. It also logs whether the logo URL actually downloads.
+function authorize() {
+  Logger.log("My address: " + Session.getEffectiveUser().getEmail());
+  if (LOGO_URL) {
+    const resp = UrlFetchApp.fetch(LOGO_URL, { muteHttpExceptions: true });
+    Logger.log("Logo fetch: HTTP " + resp.getResponseCode() + ", " +
+      resp.getBlob().getBytes().length + " bytes");
+  }
+  Logger.log("Gmail quota left today: " + MailApp.getRemainingDailyQuota());
+  Logger.log("All permissions granted — now publish a New version " +
+    "(Deploy > Manage deployments) if you just pasted new code.");
+}
+
 // Visiting the web-app URL in a browser (a GET) shows a friendly status
 // instead of Google's "unable to open the file" error — an easy health
 // check that the deployment is alive. Sending always goes through doPost.
@@ -106,7 +123,10 @@ function doPost(e) {
     // bounced emails" button.
     if (data.action === "bounces") {
       const days = Math.min(60, Math.max(1, Number(data.days) || 14));
-      const me = Session.getEffectiveUser().getEmail().toLowerCase();
+      // Own address is only used to exclude ourselves from the matches —
+      // if the userinfo permission wasn't granted, proceed without it.
+      let me = "";
+      try { me = Session.getEffectiveUser().getEmail().toLowerCase(); } catch (_) {}
       const threads = GmailApp.search(
         "from:(mailer-daemon OR postmaster) newer_than:" + days + "d", 0, 50);
       const bounces = [];
