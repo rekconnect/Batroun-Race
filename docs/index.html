@@ -3079,6 +3079,11 @@ form.addEventListener("submit", async (e) => {
     // Build N docPayloads up front, then commit everything in ONE atomic
     // writeBatch. Either all N registrations + the phone-index land or none
     // do — no half-submitted families.
+    // Will the automatic payment-request email fire after commit? Decided
+    // here because the sent-stamp must ride the CREATE — public visitors
+    // can't update a registration afterwards (security rules).
+    const willAutoEmail = totalPrice > 0 && EMAIL_CFG?.autoPending && !!payload.email
+      && /^https:\/\/script\.google\.com\//.test(EMAIL_CFG?.webhookUrl || "");
     const created = [];
     const batch = writeBatch(db);
     for (let i = 1; i <= N; i++) {
@@ -3087,6 +3092,10 @@ form.addEventListener("submit", async (e) => {
       if (i === 1) {
         docPayload = { ...payload, whishReference: refs[0] };
         if (N > 1) docPayload.groupSize = N;
+        if (willAutoEmail) {
+          docPayload.pendingEmailSentAt = serverTimestamp();
+          docPayload.pendingEmailSentBy = "auto (registration)";
+        }
       } else {
         const ownEmail = (data[`p${i}_email`] || "").trim().toLowerCase();
         if (ownEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownEmail)) {
@@ -3137,7 +3146,7 @@ form.addEventListener("submit", async (e) => {
     // Automatic payment-request email (when enabled in admin Settings and
     // there is something to pay). One email to the lead's address, carrying
     // Person 1's reference — the signin link shows the whole group.
-    if (totalPrice > 0 && EMAIL_CFG?.autoPending && payload.email) {
+    if (willAutoEmail) {
       sendAutoEmail(
         payload.email,
         `${COMPETITION_NAME} — Registration received, payment needed`,
