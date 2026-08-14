@@ -27,6 +27,58 @@ const SIGNATURE =
   "batrounrace.com | @batrounrace\n" +
   "WhatsApp: +961 81 300 625";
 
+// Logo shown above the signature (emails are sent as HTML with this image
+// embedded inline). Leave "" to send plain-text emails with no logo.
+const LOGO_URL = "https://register.batrounrace.com/marketing/email-logo.png";
+const LOGO_WIDTH = 120; // display width in px
+
+// Fetches the logo once and keeps it cached for 6 hours so we don't
+// re-download it for every email. Returns a Blob, or null on any failure
+// (the email is then sent without the image — never blocked by the logo).
+function logoBlob_() {
+  if (!LOGO_URL) return null;
+  try {
+    const cache = CacheService.getScriptCache();
+    const hit = cache.get("logo-b64");
+    if (hit) {
+      return Utilities.newBlob(Utilities.base64Decode(hit), "image/png", "logo.png");
+    }
+    const resp = UrlFetchApp.fetch(LOGO_URL, { muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) return null;
+    const blob = resp.getBlob().setName("logo.png");
+    const b64 = Utilities.base64Encode(blob.getBytes());
+    if (b64.length < 90000) cache.put("logo-b64", b64, 21600); // cache limit ~100KB
+    return blob;
+  } catch (_) {
+    return null;
+  }
+}
+
+function escHtml_(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Turns the plain-text message into a simple HTML email: same text, line
+// breaks preserved, URLs clickable, logo + signature at the bottom.
+function htmlBody_(body, withLogo) {
+  const linkify = function (t) {
+    return escHtml_(t).replace(/(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" style="color:#0A66C2">$1</a>');
+  };
+  const main = linkify(body).replace(/\n/g, "<br>");
+  let sig = "";
+  if (SIGNATURE) {
+    sig = '<br><br><span style="color:#667">' +
+      linkify(SIGNATURE).replace(/\n/g, "<br>") + "</span>";
+  }
+  const logo = withLogo
+    ? '<br><br><img src="cid:brlogo" width="' + LOGO_WIDTH + '" alt="Batroun Race">'
+    : "";
+  return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;' +
+    'line-height:1.55;color:#1a1a1a">' + main + logo + sig + "</div>";
+}
+
 // Visiting the web-app URL in a browser (a GET) shows a friendly status
 // instead of Google's "unable to open the file" error — an easy health
 // check that the deployment is alive. Sending always goes through doPost.
@@ -105,9 +157,16 @@ function doPost(e) {
       Utilities.Charset.UTF_8));
     if (cache.get(sig)) return out_({ ok: true, deduped: true });
 
-    GmailApp.sendEmail(to, subject, body + (SIGNATURE ? "\n\n" + SIGNATURE : ""), {
-      name: String(data.fromName || "Batroun Race").slice(0, 80)
-    });
+    // Plain-text version (fallback for clients that block HTML) + HTML
+    // version with the inline logo. If the logo can't be fetched the HTML
+    // simply goes out without it.
+    const logo = logoBlob_();
+    const opts = {
+      name: String(data.fromName || "Batroun Race").slice(0, 80),
+      htmlBody: htmlBody_(body, !!logo)
+    };
+    if (logo) opts.inlineImages = { brlogo: logo };
+    GmailApp.sendEmail(to, subject, body + (SIGNATURE ? "\n\n" + SIGNATURE : ""), opts);
     cache.put(sig, "1", 300);
     props.setProperty(key, String(n + 1));
 
