@@ -177,6 +177,8 @@ function doPost(e) {
 }
 
 function out_(o) {
+  // NB: the method is setMimeType — setContentType doesn't exist on
+  // TextOutput and throws, which silently broke every response.
   return ContentService.createTextOutput(JSON.stringify(o))
-    .setContentType(ContentService.MimeType.JSON);
+    .setMimeType(ContentService.MimeType.JSON);
 }
