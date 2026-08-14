@@ -317,6 +317,7 @@
     <!-- ============ Registrations ============ -->
     <section id="tab-registrations" class="tab active">
       <div class="stats" id="statsGrid"></div>
+      <p id="srcBreakdown" class="muted" style="margin:10px 0 0;font-size:.9rem"></p>
 
       <div class="card">
         <div class="filters-grid" id="filtersBar">
@@ -2228,6 +2229,21 @@ function renderStats() {
     <div class="stat"><div class="label">BIB received</div><div class="value accent">${checkedIn} <span style="font-size:.5em;opacity:.7">/ ${confirmedCount}</span></div></div>
     <div class="stat"><div class="label">Revenue collected</div><div class="value accent">$${revenue}</div></div>
   `;
+
+  // Where they came from — only once the links on batrounrace.com start
+  // tagging themselves, and only counting registrations that carry a tag.
+  // Anything registered before the tagging shipped simply has no source.
+  const bySrc = {};
+  active.forEach(r => { if (r.src) bySrc[r.src] = (bySrc[r.src] || 0) + 1; });
+  const srcEl = $("#srcBreakdown");
+  if (srcEl) {
+    const rows = Object.entries(bySrc).sort((a, b) => b[1] - a[1]);
+    srcEl.innerHTML = rows.length
+      ? `Came from — ${rows.map(([s, n]) => `<strong>${escapeHtml(s)}</strong> ${n}`).join(" · ")}`
+        + (total > rows.reduce((s, r) => s + r[1], 0)
+            ? ` · <span style="opacity:.7">untagged ${total - rows.reduce((s, r) => s + r[1], 0)}</span>` : "")
+      : "";
+  }
 }
 
 // ===== Registrations: filter + sort + table =====
@@ -2958,6 +2974,7 @@ function openRegDetails(r) {
       ${k("Club", r.club)}
       ${k("Medical notes", r.medicalNotes)}
       ${k("Emergency contact", `${r.emergencyContactName || ""} — ${r.emergencyContactPhone || ""}`)}
+      ${k("Came from", r.src)}
       ${k("Registered at", fmtDate(r.registeredAt))}
       ${customRows}
       ${r.teammate ? `

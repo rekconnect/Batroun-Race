@@ -3103,6 +3103,10 @@ form.addEventListener("submit", async (e) => {
     registeredAt: serverTimestamp(),
     paidAt: null,
     custom: collectCustomValues(),
+    // Where this runner came from: ?src= on the URL, set by the links on
+    // batrounrace.com. Rides on the registration itself, so a finished
+    // sign-up carries its source and not just the abandoned ones.
+    src: REG_SRC ? String(REG_SRC).slice(0, 59) : null,
     teammate: cat.isRelay ? {
       firstName: data.t_first?.trim() || null,
       lastName:  data.t_last?.trim()  || null,
