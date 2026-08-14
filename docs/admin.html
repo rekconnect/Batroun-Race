@@ -299,6 +299,7 @@
   <nav class="tabs">
     <button data-tab="registrations" class="active">Registrations</button>
     <button data-tab="confirmed">Confirmed</button>
+    <button data-tab="unfinished">Unfinished</button>
     <button data-tab="result">Results</button>
     <button data-tab="sponsors">Sponsors</button>
     <button data-tab="expenses">Expenses</button>
@@ -591,6 +592,33 @@
     </section>
 
     <!-- ============ Backup (deleted registrations) ============ -->
+    <!-- ============ Unfinished registrations ============ -->
+    <section id="tab-unfinished" class="tab">
+      <div class="card">
+        <h2>Started but never finished</h2>
+        <p class="muted" style="margin:0 0 12px">People who filled in enough of the form to be reachable and then left without submitting. They are not registered and not counted anywhere else — this is the only place they appear. A row disappears by itself once that mobile registers.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button id="unfExport" class="btn sec">Export CSV</button>
+          <span id="unfCount" class="muted" style="align-self:center;font-size:.9rem"></span>
+        </div>
+        <div class="table-wrap">
+          <table id="unfTable">
+            <thead><tr>
+              <th>Started</th>
+              <th>Last seen</th>
+              <th>Name</th>
+              <th>Mobile</th>
+              <th>Email</th>
+              <th>Race</th>
+              <th>Came from</th>
+              <th></th>
+            </tr></thead>
+            <tbody><tr><td colspan="8" class="empty">Nobody has left a form unfinished.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section id="tab-backup" class="tab">
       <div class="card">
         <h2>Deleted registrations — admin only</h2>
@@ -1601,6 +1629,7 @@ const COMPETITION_ID = (() => {
 
 // State
 let regs = [];
+let attempts = [];   // /attempts — forms started and never submitted
 let cats = [];
 let sponsors = [];
 let expenses = []; // /expenses — outgoing money for the race (permits, bibs, etc.)
@@ -1985,6 +2014,17 @@ function startListeners() {
     err => toast("Registrations listener: " + err.message, true)
   );
 
+  // Unfinished registrations. Ordered client-side: an attempt written before
+  // this feature shipped has no lastSeenAt, and orderBy would drop it.
+  onSnapshot(
+    collection(db, "competitions", COMPETITION_ID, "attempts"),
+    snap => {
+      attempts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderUnfinishedTab();
+    },
+    err => toast("Unfinished listener: " + err.message, true)
+  );
+
   // Sponsors + Expenses — admin only (contain money + private contacts).
   // Staff (viewer) skips both subscriptions entirely so the Firestore rule
   // never has to deny them and the console stays clean.
@@ -2086,7 +2126,83 @@ function startListeners() {
 // waiting for the snapshot callback to round-trip back from Firestore.
 function rerenderAllTables() {
   renderStats(); renderRegTable(); renderBackupTable(); renderConfirmedTab(); renderResultTab();
+  renderUnfinishedTab();
 }
+
+// ===== Unfinished registrations =====
+// The public form leaves a doc under /attempts once a visitor is reachable,
+// and stamps it completed when the registration lands. Anything left
+// unstamped is somebody who walked away mid-form — invisible everywhere
+// else on this dashboard, because no registration was ever created.
+function unfinishedRows() {
+  // A phone that has since registered is finished, whatever the stamp says:
+  // they may have come back on another device, or the stamp write may have
+  // lost the race with the visitor closing the tab.
+  const registered = new Set(regs.filter(r => !r.deletedAt).map(r => r.phone));
+  return attempts
+    .filter(a => !a.completedAt && !registered.has(a.phone))
+    .sort((a, b) => (b.lastSeenAt?.toMillis?.() || 0) - (a.lastSeenAt?.toMillis?.() || 0));
+}
+
+function renderUnfinishedTab() {
+  const tbody = $("#unfTable tbody");
+  if (!tbody) return;
+  const rows = unfinishedRows();
+  const countEl = $("#unfCount");
+  if (countEl) countEl.textContent = rows.length
+    ? `${rows.length} unfinished · ${rows.filter(r => r.email).length} reachable by email`
+    : "";
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">Nobody has left a form unfinished.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(a => {
+    const name = `${a.firstName || ""} ${a.lastName || ""}`.trim() || "—";
+    const cat = cats.find(c => c.id === a.categoryId);
+    const wa = a.phone ? a.phone.replace(/[^\d]/g, "") : "";
+    return `
+    <tr>
+      <td>${fmtDate(a.startedAt)}</td>
+      <td>${fmtDate(a.lastSeenAt)}</td>
+      <td>${escapeHtml(name)}</td>
+      <td><strong style="font-family:ui-monospace,Menlo,monospace">${escapeHtml(a.phone || "—")}</strong></td>
+      <td>${escapeHtml(a.email || "—")}</td>
+      <td>${escapeHtml(cat?.name || a.categoryId || "—")}</td>
+      <td>${escapeHtml(a.src || "—")}</td>
+      <td class="actions">
+        ${wa ? `<a class="btn tiny sec" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
+        ${a.email ? `<a class="btn tiny sec" href="mailto:${encodeURIComponent(a.email)}?subject=${encodeURIComponent("Your Batroun Race registration")}" target="_blank" rel="noopener">Email</a>` : ""}
+        <button class="btn tiny danger" data-unf="${escapeHtml(a.phone)}">Dismiss</button>
+      </td>
+    </tr>`;
+  }).join("");
+  tbody.querySelectorAll("button[data-unf]").forEach(b => {
+    b.addEventListener("click", async () => {
+      if (!confirm("Remove this row? It will come back if they open the form again.")) return;
+      try {
+        await deleteDoc(doc(db, "competitions", COMPETITION_ID, "attempts", b.dataset.unf));
+        toast("Removed.");
+      } catch (e) { toast("Couldn't remove: " + e.message, true); }
+    });
+  });
+}
+
+document.getElementById("unfExport")?.addEventListener("click", () => {
+  const rows = unfinishedRows();
+  if (!rows.length) return toast("Nothing to export.", true);
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = ["Started,Last seen,First name,Last name,Mobile,Email,Race,Came from"]
+    .concat(rows.map(a => [
+      fmtDate(a.startedAt), fmtDate(a.lastSeenAt), a.firstName, a.lastName,
+      a.phone, a.email, cats.find(c => c.id === a.categoryId)?.name || a.categoryId, a.src
+    ].map(esc).join(","))).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `batroun-race-unfinished-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
 
 // ===== Registrations: stats =====
 function renderStats() {

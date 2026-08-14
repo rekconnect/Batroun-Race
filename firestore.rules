@@ -63,6 +63,23 @@ service cloud.firestore {
         && d.consents.dataUsage == true;
     }
 
+    // A visitor who fills the form and leaves writes nothing today — the
+    // first write is the submit itself, so the drop-off is invisible. An
+    // attempt doc is the trail they leave once they are contactable. It
+    // carries a phone and an email, so the public may write one but never
+    // read one back.
+    function isValidAttempt() {
+      let d = request.resource.data;
+      return d.phone is string && d.phone.size() > 0 && d.phone.size() < 40
+        && (!('email'     in d.keys()) || d.email     is string && d.email.size()     < 200)
+        && (!('firstName' in d.keys()) || d.firstName is string && d.firstName.size() < 100)
+        && (!('lastName'  in d.keys()) || d.lastName  is string && d.lastName.size()  < 100)
+        && (!('src'       in d.keys()) || d.src == null || (d.src is string && d.src.size() < 60))
+        && (!('categoryId' in d.keys()) || d.categoryId == null || (d.categoryId is string && d.categoryId.size() < 80))
+        && d.keys().hasOnly(['phone', 'firstName', 'lastName', 'email', 'categoryId',
+                             'src', 'startedAt', 'lastSeenAt', 'completedAt']);
+    }
+
     function registrationOpen(competitionId) {
       // Allow registration when:
       //   - the competition doc doesn't exist yet, OR
@@ -148,6 +165,25 @@ service cloud.firestore {
         allow create, update:
           if request.resource.data.refs is list
           && request.resource.data.refs.size() <= 50;
+        allow delete: if isAdmin();
+      }
+
+      // Unfinished registrations. Doc id = normalized phone, so a visitor
+      // who tries twice leaves one row rather than a pile, and the admin
+      // side can match an attempt against a real registration by phone.
+      // Write-only for the public, same as a suggestion box: they cannot
+      // read anyone else's contact details back out.
+      match /attempts/{attemptId} {
+        allow get, list: if canReadDashboard();
+        // id must equal the phone inside, so a visitor can only ever write
+        // their own row and cannot scatter docs across the collection
+        allow create: if isValidAttempt()
+                       && request.resource.data.phone == attemptId
+                       && registrationOpen(competitionId);
+        // no window on the update: the "they finished" stamp must still land
+        // if the submit straddles the closing minute, or the row sticks
+        // around looking like a drop-off forever
+        allow update: if isValidAttempt() && request.resource.data.phone == attemptId;
         allow delete: if isAdmin();
       }
 
