@@ -48,6 +48,40 @@ function doPost(e) {
       return out_({ ok: false, error: "unauthorized" });
     }
 
+    // Bounce report: scan the mailbox for delivery-failure notices (wrong
+    // address, mailbox full, domain doesn't exist...) from the last N days
+    // and return the addresses they mention. Called by the admin's "Check
+    // bounced emails" button.
+    if (data.action === "bounces") {
+      const days = Math.min(60, Math.max(1, Number(data.days) || 14));
+      const me = Session.getEffectiveUser().getEmail().toLowerCase();
+      const threads = GmailApp.search(
+        "from:(mailer-daemon OR postmaster) newer_than:" + days + "d", 0, 50);
+      const bounces = [];
+      threads.forEach(function (t) {
+        t.getMessages().forEach(function (m) {
+          const bodyText = m.getPlainBody().slice(0, 5000);
+          const found = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+          const uniq = found
+            .map(function (a) { return a.toLowerCase(); })
+            .filter(function (a, i, arr) {
+              return arr.indexOf(a) === i
+                && a !== me
+                && !/mailer-daemon|postmaster|google\.com$|googlemail/.test(a);
+            })
+            .slice(0, 3);
+          if (uniq.length) {
+            bounces.push({
+              date: m.getDate().toISOString().slice(0, 10),
+              subject: m.getSubject().slice(0, 100),
+              addresses: uniq
+            });
+          }
+        });
+      });
+      return out_({ ok: true, bounces: bounces.slice(0, 50) });
+    }
+
     const to = String(data.to || "").trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
       return out_({ ok: false, error: "bad recipient" });

@@ -1367,6 +1367,7 @@ See you at the start line!"></textarea>
         <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
           <button id="emSaveBtn" class="btn">Save</button>
           <button id="emTestBtn" class="btn sec">Send test email</button>
+          <button id="emBouncesBtn" class="btn sec">Check bounced emails</button>
         </div>
         <p class="muted" style="font-size:.8rem;margin-top:10px">
           Uses the same templates as WhatsApp (Theme &amp; copy). Free Gmail
@@ -2403,6 +2404,43 @@ document.getElementById("emTestBtn")?.addEventListener("click", async () => {
   } else {
     // alert() so the full diagnostic is readable on a phone.
     alert("Test email did not confirm.\n\n" + r.detail);
+  }
+});
+
+// Bounce report: asks the webhook to scan the mailbox for delivery-failure
+// notices (wrong address, mailbox full...) and matches the bounced
+// addresses back to registrations. NOTE: spam/junk placement is invisible
+// to every sender — only hard bounces can be detected.
+document.getElementById("emBouncesBtn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("emBouncesBtn");
+  if (!/^https:\/\/script\.google\.com\/.+\/exec\b/.test(emailCfg.webhookUrl || "")) {
+    alert("Set up and save the webhook URL first."); return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  try {
+    const res = await fetch(emailCfg.webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ token: emailCfg.token || "", action: "bounces", days: 14 })
+    });
+    const j = await res.json().catch(() => null);
+    if (!j || !j.ok) throw new Error(j?.error || "couldn't read the report (browser blocked the reply?)");
+    if (!j.bounces.length) {
+      alert("No bounced emails in the last 14 days — every sent email was accepted by the recipient's mail server.\n\n(Note: whether a delivered email landed in Inbox or Spam is not detectable by any sender.)");
+    } else {
+      const lines = j.bounces.map(b => b.addresses.map(a => {
+        const match = regs.find(r => String(r.email || "").toLowerCase() === a && !r.deletedAt);
+        const who = match ? ` — ${(match.firstName || "")} ${(match.lastName || "")}`.trimEnd() + ` (${match.whishReference || match.id})` : "";
+        return `• ${a}${who}   [${b.date}]`;
+      }).join("\n")).join("\n");
+      alert(`Bounced emails — last 14 days (${j.bounces.length} notice${j.bounces.length > 1 ? "s" : ""}):\n\n${lines}\n\nFix the address in the registration (Edit) and resend from the row's Email button.`);
+    }
+  } catch (e) {
+    alert("Bounce check failed: " + (e?.message || e) + "\n\nMake sure the DEPLOYED script is the latest version (Manage deployments → New version).");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Check bounced emails";
   }
 });
 
