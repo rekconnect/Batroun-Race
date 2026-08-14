@@ -1492,6 +1492,75 @@ const openBanner   = document.getElementById("openBanner");
 const openBannerDates = document.getElementById("openBannerDates");
 const form = document.getElementById("regForm");
 
+// ============================================================
+// Unfinished registrations
+// ============================================================
+// Nothing is written until submit, so a visitor who fills half the form and
+// leaves is invisible — we cannot count them and cannot reach them. Once
+// they are contactable (a mobile and a first name) we leave one small doc
+// under /attempts, keyed by their phone, and stamp it completed when the
+// registration itself lands. What stays unstamped is the drop-off list,
+// with a way to follow it up.
+//
+// All of it is best-effort and silent: a failure here must never cost a
+// registration, so nothing below is awaited on the submit path.
+const REG_SRC = new URLSearchParams(location.search).get("src");
+let attemptPhone = null;      // set once we have written a row
+let attemptTimer = null;
+
+function attemptFields() {
+  if (!form) return null;
+  const val = (n) => (form.elements[n]?.value || "").trim();
+  const phone = normalizePhone(val("phone"));
+  const firstName = val("first");
+  // not enough to reach them yet — write nothing
+  if (!phone || phone.length < 7 || !firstName) return null;
+  const d = {
+    phone,
+    firstName: firstName.slice(0, 99),
+    lastName: val("last").slice(0, 99),
+    email: val("email").toLowerCase().slice(0, 199),
+    categoryId: val("category") || null,
+    lastSeenAt: serverTimestamp()
+  };
+  if (REG_SRC) d.src = String(REG_SRC).slice(0, 59);
+  return d;
+}
+
+async function touchAttempt() {
+  try {
+    const d = attemptFields();
+    if (!d) return;
+    if (!attemptPhone) d.startedAt = serverTimestamp();
+    await setDoc(
+      doc(db, "competitions", COMPETITION_ID, "attempts", d.phone),
+      d, { merge: true }
+    );
+    attemptPhone = d.phone;
+  } catch (err) {
+    console.debug("attempt trail:", err?.message || err);
+  }
+}
+
+// Typing is noisy; one write a couple of seconds after they stop is plenty.
+form?.addEventListener("input", () => {
+  clearTimeout(attemptTimer);
+  attemptTimer = setTimeout(touchAttempt, 2500);
+});
+
+function completeAttempt(phoneNorm) {
+  try {
+    const phone = phoneNorm || attemptPhone;
+    if (!phone) return;
+    clearTimeout(attemptTimer);
+    setDoc(
+      doc(db, "competitions", COMPETITION_ID, "attempts", phone),
+      { phone, completedAt: serverTimestamp() },
+      { merge: true }
+    ).catch(() => {});
+  } catch (_) { /* never let this cost a finished registration */ }
+}
+
 // Compact range like "1 June – 1 July 2026" (or "1 June 2026 – 5 January 2027"
 // across a year boundary). Falls back gracefully if only one bound is set.
 function fmtRegistrationWindow() {
@@ -3034,6 +3103,10 @@ form.addEventListener("submit", async (e) => {
     registeredAt: serverTimestamp(),
     paidAt: null,
     custom: collectCustomValues(),
+    // Where this runner came from: ?src= on the URL, set by the links on
+    // batrounrace.com. Rides on the registration itself, so a finished
+    // sign-up carries its source and not just the abandoned ones.
+    src: REG_SRC ? String(REG_SRC).slice(0, 59) : null,
     teammate: cat.isRelay ? {
       firstName: data.t_first?.trim() || null,
       lastName:  data.t_last?.trim()  || null,
@@ -3153,6 +3226,9 @@ form.addEventListener("submit", async (e) => {
         buildPendingEmailBody(payload.firstName, refs[0])
       );
     }
+
+    // They finished — stamp their attempt so they drop off the follow-up list
+    completeAttempt(phoneNorm);
 
     // Auto-sign-in so the cart icon + Hi-name appear in the top bar
     // immediately. Confirmation panel still shows for payment instructions.
