@@ -2213,13 +2213,13 @@ function renderExtraParticipants(count) {
             </select>
           </div>
         </div>
-        ${pricedCheckboxFields().length ? `
+        ${perPersonCheckboxFields().length ? `
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
           <div style="font-weight:800;font-size:.92rem;margin-bottom:6px;color:var(--accent)">${escHtml(CUSTOM_SECTION_TITLE)} — Participant ${n}</div>
-          ${pricedCheckboxFields().map(f => `
+          ${perPersonCheckboxFields().map(f => `
           <div class="row" style="margin:4px 0"><label class="inline">
             <input type="checkbox" id="${p}cf_${f.key}">
-            <span>${escHtml(f.label)} <span style="color:var(--accent);font-weight:700">(+$${f.price})</span></span>
+            <span>${escHtml(f.label)}${(Number(f.price) || 0) > 0 ? ` <span style="color:var(--accent);font-weight:700">(+$${f.price})</span>` : ""}</span>
           </label></div>`).join("")}
         </div>` : ""}
       </div>`);
@@ -2242,7 +2242,7 @@ function renderExtraParticipants(count) {
     if (catEl) catEl.addEventListener("change", () => { recomputeMultiTotal(); renderParticipantSubQ(n); });
     if (dobEl) dobEl.addEventListener("change", () => renderParticipantSubQ(n));
     // This participant's own transportation checkboxes update the total.
-    pricedCheckboxFields().forEach(f => {
+    perPersonCheckboxFields().forEach(f => {
       document.getElementById(`p${n}_cf_${f.key}`)?.addEventListener("change", recomputeMultiTotal);
     });
     // Single-category event: preselect it here too (the main dropdown is hidden).
@@ -2478,12 +2478,10 @@ function renderCustomFields() {
     if (f.type === "textarea") {
       control = `<textarea id="${id}" name="${id}" rows="3" ${req}></textarea>`;
     } else if (f.type === "checkbox") {
-      // PRICED checkboxes are per-person and rendered separately below
-      // (one row per participant) — skip them in this pass.
-      if (price > 0) return "";
-      return `<div class="row"><label class="inline">
-        <input type="checkbox" id="${id}" name="${id}" ${req}>
-        <span>${safeLabel}${reqStar}</span></label></div>`;
+      // ALL checkboxes (priced or free) are per-person and rendered
+      // separately (one row per participant) — skip them in this pass so
+      // they never show up twice or land in a separate card.
+      return "";
     } else if (f.type === "select") {
       const opts = '<option value="">Select…</option>' +
         (f.options || []).map(o => `<option>${String(o).replace(/</g,"&lt;")}</option>`).join("");
@@ -2498,10 +2496,10 @@ function renderCustomFields() {
 
   renderAddOnRows();
 
-  // The card holds only the non-priced custom fields — priced checkboxes
-  // render inside Person 1's "Race extras" card (and each participant's
-  // block). Hide the card when nothing else remains.
-  const hasPlainFields = CUSTOM_FIELDS.some(f => !(f.type === "checkbox" && (Number(f.price) || 0) > 0));
+  // The card holds only the non-checkbox custom fields — checkboxes render
+  // inside Person 1's "Race extras" card (and each participant's block).
+  // Hide the card when nothing else remains.
+  const hasPlainFields = CUSTOM_FIELDS.some(f => f.type !== "checkbox");
   card.style.display = hasPlainFields ? "" : "none";
   // Priced NUMBER fields refresh the price display live as they're edited.
   CUSTOM_FIELDS.filter(f => f.type === "number" && (Number(f.price) || 0) > 0).forEach(f => {
@@ -2512,8 +2510,8 @@ function renderCustomFields() {
   initFieldErrors();
 }
 
-// Person 1's priced checkboxes render at the end of THEIR "Race extras"
-// card (#p1AddOns) under the admin's section title — mirroring the
+// Person 1's checkboxes (priced or free) render at the end of THEIR "Race
+// extras" card (#p1AddOns) under the admin's section title — mirroring the
 // per-participant sections each extra participant gets in their block —
 // so every person's transportation sits inside their own section. Element
 // ids stay cf_<key> (Person 1) and p<n>_cf_<key> (Person n), which is
@@ -2521,7 +2519,7 @@ function renderCustomFields() {
 function renderAddOnRows() {
   const box = document.getElementById("p1AddOns");
   if (!box) return;
-  const fields = pricedCheckboxFields();
+  const fields = perPersonCheckboxFields();
   if (!fields.length) { box.innerHTML = ""; return; }
 
   // Effective participant count (1 unless the multi selector is visible).
@@ -2538,7 +2536,7 @@ function renderAddOnRows() {
       ${fields.map(f => `
       <div class="row" style="margin:4px 0"><label class="inline">
         <input type="checkbox" id="cf_${f.key}">
-        <span>${escHtml(f.label)} <span style="color:var(--accent);font-weight:700">(+$${f.price})</span></span>
+        <span>${escHtml(f.label)}${(Number(f.price) || 0) > 0 ? ` <span style="color:var(--accent);font-weight:700">(+$${f.price})</span>` : ""}</span>
       </label></div>`).join("")}
     </div>`;
 
@@ -2560,13 +2558,16 @@ function collectCustomValues() {
   return out;
 }
 
-// Priced add-ons: a custom CHECKBOX field carries a flat PER-PERSON extra
-// charge (e.g. "Bus from Batroun to Tannourine (+$5)"). On group
-// registrations every participant gets their own copy of the checkbox and
-// each ticked box adds the charge to THAT participant's own registration.
-// A NUMBER field charges per unit and applies to Person 1 only.
-function pricedCheckboxFields() {
-  return CUSTOM_FIELDS.filter(f => f.type === "checkbox" && (Number(f.price) || 0) > 0);
+// Per-person checkboxes: EVERY custom CHECKBOX field is a per-person
+// choice (e.g. "Bus from Batroun (+$5)", "No bus needed"). On group
+// registrations every participant gets their own copy of the checkbox in
+// their own section, and the tick is stored on that participant's own
+// registration. A price on the field (optional) adds a flat charge to that
+// participant when ticked; unpriced boxes are free choices that render in
+// the same section — NOT in a separate card. A NUMBER field with a price
+// charges per unit and applies to Person 1 only.
+function perPersonCheckboxFields() {
+  return CUSTOM_FIELDS.filter(f => f.type === "checkbox");
 }
 
 // Add-ons selected for participant n. n === 1 reads the main form's card
@@ -2606,7 +2607,7 @@ function aggregateAddOnItems(N) {
 // This participant's checkbox choices, stored on their own registration doc.
 function participantCheckboxValues(n) {
   const out = {};
-  pricedCheckboxFields().forEach(f => {
+  perPersonCheckboxFields().forEach(f => {
     out[f.key] = !!document.getElementById(`p${n}_cf_${f.key}`)?.checked;
   });
   return out;
