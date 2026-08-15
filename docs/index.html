@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta content="width=device-width,initial-scale=1" name="viewport">
-<title>Register — Batroun Race</title>
+<title>Race Registration</title>
 <script>
 /* Apply the CACHED theme colors before first paint, so repeat visitors never
    see the built-in palette flash before the admin theme kicks in. The module
@@ -11,6 +11,14 @@
    visitors still start from the built-in colors until the first fetch. */
 (function () {
   try {
+    // Hide the hero heading/subtitle until the real event texts are applied
+    // (by the reveal script after the hero, or by the module) — first-time
+    // visitors get a clean fade-in instead of a placeholder-event flash.
+    // The timeout is the safety net: if everything else fails, show the
+    // placeholders after 4s rather than an empty hero forever.
+    document.documentElement.classList.add("hero-wait");
+    setTimeout(function () { document.documentElement.classList.remove("hero-wait"); }, 4000);
+
     var comp = "batroun-race-2026";
     var a = JSON.parse(localStorage.getItem("br-active-comp-v1") || "null");
     if (a && a.id) comp = a.id;
@@ -19,6 +27,11 @@
     if (!t) return;
     var r = document.documentElement.style;
     if (t.accent)  r.setProperty("--accent",  t.accent);
+    var am = /^#?([0-9a-f]{6})$/i.exec(String(t.accent || "").trim());
+    if (am) {
+      var an = parseInt(am[1], 16);
+      r.setProperty("--accent-rgb", ((an >> 16) & 255) + "," + ((an >> 8) & 255) + "," + (an & 255));
+    }
     if (t.accent2) r.setProperty("--accent2", t.accent2);
     if (t.ink)     r.setProperty("--ink",     t.ink);
     if (t.bg1)     r.setProperty("--bg1",     t.bg1);
@@ -40,9 +53,14 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root{
-    --bg:#030F2B;--bg1:#030F2B;--bg2:#0A1E45;
-    --ink:#ecf6ff;--muted:#9fb2c8;--line:rgba(255,255,255,.16);
-    --accent:#F7A00A;--accent2:#DE8E05;--ring:0 0 0 3px rgba(247,160,10,.28);
+    /* Built-in defaults = the CURRENT event's palette (harmless static
+       placeholders — the admin theme overrides them at runtime). Keeping
+       them in sync means first-time visitors, who have no cached theme
+       yet, don't get a flash of a previous event's colors.
+       --accent-rgb drives every rgba() glow/tint so it follows the theme. */
+    --bg:#082A2E;--bg1:#082A2E;--bg2:#0F3A3F;
+    --ink:#f2f7f6;--muted:#a3bcb9;--line:rgba(255,255,255,.16);
+    --accent:#FF4D2E;--accent2:#E03A1D;--accent-rgb:255,77,46;--ring:0 0 0 3px rgba(var(--accent-rgb),.28);
     --warn:#ffb74d;--err:#ff6b6b;--ok:#7cf0c0;
     --card:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03));
   }
@@ -55,7 +73,7 @@
        rgba by applyTheme + the pre-paint script), so a green theme tints
        the photo green, not the old hardcoded navy. */
     background:
-      linear-gradient(180deg, var(--bg-overlay1, rgba(3,15,43,.88)), var(--bg-overlay2, rgba(10,30,69,.94))),
+      linear-gradient(180deg, var(--bg-overlay1, rgba(8,42,46,.88)), var(--bg-overlay2, rgba(15,58,63,.94))),
       var(--bg-image) center/cover fixed no-repeat
   }
   *{box-sizing:border-box;max-width:100%}
@@ -75,6 +93,15 @@
   .muted{color:var(--muted);font-size:.95rem}
 
   /* ---------- Hero typography (heading + subtitle) ---------- */
+  /* The hero texts stay invisible until the real event name is known (from
+     the localStorage cache or the Firestore fetch) — so a first-time
+     visitor never sees a previous event's placeholder flash. Implemented by
+     PAUSING the fadeUp entrance animation (declared below) at its first
+     frame (opacity 0): a plain opacity rule would lose to the animation in
+     the cascade. When the head-script/reveal/module removes .hero-wait the
+     entrance animation simply plays, and a 4s safety timeout reveals
+     regardless if the network is slow or Firestore is down. */
+  html.hero-wait .hero h1,html.hero-wait .hero p{animation-play-state:paused}
   .hero #reg-heading{
     font-family:'Instrument Sans',ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;
     font-size:clamp(34px,8.5vw,60px);
@@ -96,10 +123,10 @@
     margin:18px auto 0;
     background:linear-gradient(90deg, var(--accent), var(--accent2));
     border-radius:2px;
-    box-shadow:0 0 18px rgba(247,160,10,.5);
+    box-shadow:0 0 18px rgba(var(--accent-rgb),.5);
   }
   .hero #reg-subtitle{
-    color:#d2e6f8;
+    color:#d3e6e2;
     font-size:clamp(15px,2.6vw,17.5px);
     font-weight:400;
     line-height:1.5;
@@ -123,7 +150,7 @@
     background:linear-gradient(180deg, var(--accent), var(--accent2));
     border-radius:2px;
     flex:0 0 auto;
-    box-shadow:0 0 10px rgba(247,160,10,.4);
+    box-shadow:0 0 10px rgba(var(--accent-rgb),.4);
   }
 
   /* ---------- Field labels (slightly refined) ---------- */
@@ -246,7 +273,7 @@
   /* Checkbox: scale-in pop when checked */
   input[type="checkbox"]{transition:transform .15s ease, box-shadow .15s ease}
   input[type="checkbox"]:active{transform:scale(.92)}
-  input[type="checkbox"]:focus-visible{box-shadow:0 0 0 3px rgba(247,160,10,.35);outline:none}
+  input[type="checkbox"]:focus-visible{box-shadow:0 0 0 3px rgba(var(--accent-rgb),.35);outline:none}
 
   /* Reference code shimmer on appear */
   .reference{position:relative;overflow:hidden}
@@ -264,7 +291,7 @@
   /* Better focus rings (keyboard-only) */
   *:focus-visible{outline:none}
   input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{
-    box-shadow:0 0 0 3px rgba(247,160,10,.35), 0 0 0 1px var(--accent)
+    box-shadow:0 0 0 3px rgba(var(--accent-rgb),.35), 0 0 0 1px var(--accent)
   }
 
   /* Custom select arrow (replace native, since we have appearance:none) */
@@ -288,9 +315,9 @@
   }
 
   .btn{display:block;width:100%;margin:12px 0 96px;padding:16px;border-radius:12px;
-    border:1px solid rgba(247,160,10,.45);
+    border:1px solid rgba(var(--accent-rgb),.45);
     background:linear-gradient(180deg,var(--accent),var(--accent2));color:#fff;font-weight:900;
-    box-shadow:0 14px 36px rgba(247,160,10,.26);cursor:pointer;font-size:1.05rem}
+    box-shadow:0 14px 36px rgba(var(--accent-rgb),.26);cursor:pointer;font-size:1.05rem}
   .btn:disabled{opacity:.6;cursor:not-allowed}
 
   /* Top bar with logo (admin-uploadable) */
@@ -351,14 +378,14 @@
     color:#fff;font-weight:800;letter-spacing:.01em;
     padding:12px 20px;border-radius:14px;margin:8px auto 14px;
     text-align:center;max-width:720px;
-    box-shadow:0 8px 24px rgba(247,160,10,.18);
+    box-shadow:0 8px 24px rgba(var(--accent-rgb),.18);
     white-space:pre-wrap;word-break:break-word;font-size:1.02rem;line-height:1.4
   }
 
   /* Legacy wave banner (kept hidden for back-compat) */
   .wave-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;
-    padding:10px 14px;border-radius:12px;background:rgba(247,160,10,.10);
-    border:1px solid rgba(247,160,10,.35);margin:6px 0 4px;font-size:.92rem}
+    padding:10px 14px;border-radius:12px;background:rgba(var(--accent-rgb),.10);
+    border:1px solid rgba(var(--accent-rgb),.35);margin:6px 0 4px;font-size:.92rem}
   .wave-banner .pill{background:var(--accent);color:#fff;padding:3px 10px;border-radius:999px;
     font-weight:900;font-size:.82rem;letter-spacing:.3px}
 
@@ -381,7 +408,7 @@
   .confirm.show{display:block}
   .reference{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1.8rem;
     font-weight:900;letter-spacing:2px;color:var(--accent);text-align:center;
-    padding:14px;background:rgba(0,0,0,.25);border-radius:12px;border:1px dashed rgba(247,160,10,.5);
+    padding:14px;background:rgba(0,0,0,.25);border-radius:12px;border:1px dashed rgba(var(--accent-rgb),.5);
     margin:10px 0;user-select:all}
   .qr-box{text-align:center;padding:14px;background:#fff;border-radius:12px;margin:10px 0;
     color:#fff}
@@ -403,7 +430,7 @@
      border, font-weight) so the page hierarchy feels consistent across
      the three registration states; stacked layout: heading on top,
      dates underneath. */
-  .open-banner{background:rgba(247,160,10,.12);border:1px solid rgba(247,160,10,.45);
+  .open-banner{background:rgba(var(--accent-rgb),.12);border:1px solid rgba(var(--accent-rgb),.45);
     color:var(--ink);padding:14px;border-radius:12px;text-align:center;
     font-weight:700;margin:0 0 14px}
   .open-banner .open-banner-title{font-weight:900;color:var(--accent);
@@ -467,7 +494,7 @@
   .cart-item .status-pill{display:inline-block;padding:3px 10px;border-radius:999px;
     font-size:.75rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-left:8px}
   .cart-item .status-pending{background:rgba(255,196,0,.18);color:#ffd34d;border:1px solid rgba(255,196,0,.4)}
-  .cart-item .status-paid{background:rgba(247,160,10,.18);color:var(--accent);border:1px solid rgba(247,160,10,.4)}
+  .cart-item .status-paid{background:rgba(var(--accent-rgb),.18);color:var(--accent);border:1px solid rgba(var(--accent-rgb),.4)}
 
   /* ── Custom date-of-birth picker ── */
   /* Override the generic input[readonly] styles so the DOB field looks tappable */
@@ -529,14 +556,48 @@
 <section aria-labelledby="reg-heading">
 
   <div class="wrap hero">
-    <h1 id="reg-heading">Register for Batroun Race</h1>
-    <p class="muted" id="reg-subtitle">Coastal course • pro timing • hydration every 2–3 km • finisher medals</p>
+    <!-- Deliberately generic placeholders: the real event heading/subtitle
+         come from the theme config. They stay hidden (html.hero-wait) until
+         the reveal script below or the module fills them in. -->
+    <h1 id="reg-heading">Race Registration</h1>
+    <p class="muted" id="reg-subtitle"></p>
 
     <div class="top-banner" id="topBanner" style="display:none">
       <span id="topBannerText"></span>
     </div>
 
   </div>
+  <script>
+  /* Repeat visitors: fill the hero from the cached config and reveal it
+     immediately — zero flash, zero wait. First-timers have no cache, so the
+     hero stays hidden until the module's Firestore fetch applies the real
+     texts (or the 4s safety timeout fires). Mirrors the module's {event}
+     resolution using the cached competition name. */
+  (function () {
+    try {
+      var comp = "batroun-race-2026";
+      var a = JSON.parse(localStorage.getItem("br-active-comp-v1") || "null");
+      if (a && a.id) comp = a.id;
+      var c = JSON.parse(localStorage.getItem("br-config-" + comp + "-v1") || "null");
+      var d = c && c.data;
+      if (!d) return;
+      var name = (d.competition && d.competition.name) || "";
+      var t = d.theme || {};
+      function fill(id, s) {
+        if (!s || typeof s !== "string") return;
+        if (s.indexOf("{event}") !== -1) {
+          if (!name) return;               // can't resolve yet — leave hidden
+          s = s.split("{event}").join(name);
+        }
+        document.getElementById(id).textContent = s;
+      }
+      fill("reg-heading",  t.heading);
+      fill("reg-subtitle", t.subtitle);
+      if (name) document.title = "Register — " + name;
+      document.documentElement.classList.remove("hero-wait");
+    } catch (e) {}
+  })();
+  </script>
 
   <div class="wrap">
 
@@ -951,7 +1012,7 @@
             <strong style="color:var(--ink);font-size:1.1rem" id="amountDue">—</strong>
           </p>
 
-          <div style="background:rgba(247,160,10,.07);border:1px solid rgba(247,160,10,.35);border-radius:12px;padding:14px;margin-top:14px">
+          <div style="background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.35);border-radius:12px;padding:14px;margin-top:14px">
             <p id="payHeading" style="margin:0 0 10px;font-weight:800;color:var(--accent)">📲 How to pay via Whish Money</p>
             <ol style="margin:0;padding-left:22px;line-height:1.7">
               <li id="whishConfirmStep">Send <strong>$X</strong> via <strong>Whish Money</strong> (app or any branch) to <strong style="color:#e6204e">81 300 625</strong> <span class="muted">(Nizar El Kady)</span>.</li>
@@ -2528,6 +2589,12 @@ function applyTheme(t) {
   const ov1 = hexToRgba(t.bg1, 0.88), ov2 = hexToRgba(t.bg2, 0.94);
   if (ov1) root.setProperty("--bg-overlay1", ov1);
   if (ov2) root.setProperty("--bg-overlay2", ov2);
+  // Every rgba() glow/tint in the CSS follows the accent via --accent-rgb.
+  const am = /^#?([0-9a-f]{6})$/i.exec(String(t.accent || "").trim());
+  if (am) {
+    const an = parseInt(am[1], 16);
+    root.setProperty("--accent-rgb", `${(an >> 16) & 255},${(an >> 8) & 255},${an & 255}`);
+  }
 
   // No automatic default photo — the page is clean unless the admin uploads one.
   // Only accept http(s):, data:, or relative paths. Strip any quote characters
@@ -2806,6 +2873,9 @@ function applyConfigData(data) {
     applyPublicFormConfig(data.publicForm.builtIn || {});
     if (Array.isArray(data.publicForm.includes) && data.publicForm.includes.length) INCLUDES = data.publicForm.includes;
   }
+  // The real event texts are in place now — reveal the hero (kept hidden
+  // since first paint so placeholders never flash at first-time visitors).
+  document.documentElement.classList.remove("hero-wait");
 }
 
 async function loadFromFirestore() {
@@ -3185,7 +3255,7 @@ function showConfirmation(created, total, cat) {
   } else {
     refEl.innerHTML = `<div style="font-size:.9rem;color:var(--muted);font-weight:600;margin-bottom:8px">${N} participants registered:</div>` +
       created.map(p => `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;background:rgba(0,0,0,.2);border:1px dashed rgba(247,160,10,.4);border-radius:10px;margin-bottom:6px;font-family:ui-monospace,Menlo,monospace;font-size:.95rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;background:rgba(0,0,0,.2);border:1px dashed rgba(var(--accent-rgb),.4);border-radius:10px;margin-bottom:6px;font-family:ui-monospace,Menlo,monospace;font-size:.95rem">
           <span style="text-align:left;font-family:'Instrument Sans',system-ui;font-weight:600;color:var(--ink)">${escHtml(p.name)}</span>
           <span style="font-weight:900;color:var(--accent);letter-spacing:1px">${escHtml(p.ref)}</span>
         </div>`).join("");
@@ -3442,7 +3512,7 @@ function renderCart(regs) {
         </div>`;
     } else {
       block = `
-        <div style="background:rgba(247,160,10,.07);border:1px solid rgba(247,160,10,.4);border-radius:14px;padding:14px">
+        <div style="background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.4);border-radius:14px;padding:14px">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <strong style="color:var(--accent);font-size:1rem">✓ Confirmed</strong>
             ${r.bibNumber ? `<span style="margin-left:auto;font-weight:900;color:var(--accent);font-size:1.1rem">Bib ${r.bibNumber}</span>` : ""}
