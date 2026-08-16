@@ -3027,8 +3027,11 @@ function applyPublicFormConfig(builtIn) {
 // Render once with hardcoded fallbacks so the page is usable instantly…
 populateCategorySelect();
 renderCustomFields();
-// …then ask Firestore for live data and re-render on top.
-loadFromFirestore();
+// …then ask Firestore for live data and re-render on top. CONFIG_READY lets
+// flows that show event data (race day on the invoice/ticket) await the real
+// config instead of racing it — the ?signin deep link once beat this load
+// and rendered an invoice with the fallback race date.
+const CONFIG_READY = loadFromFirestore();
 
 // ============================================================
 // Proceed → waiver step
@@ -3447,6 +3450,7 @@ siSubmit.addEventListener("click", async () => {
     setSession({ phone: phoneNorm, since: Date.now() });
     renderTopBar();
     closeSignin();
+    await CONFIG_READY.catch(() => {});   // invoice needs the real race day
     renderCart(allRegs);
   } catch (err) {
     console.error(err);
@@ -3726,6 +3730,9 @@ function doSignOut() {
 // closing the cart sees their original page state cleanly.
 function openCartOverlay() {
   renderCart(SESSION_REGS);
+  // If the cart was opened before the config finished loading (fast tap on
+  // a fresh visit), re-render once the real race day etc. are in.
+  CONFIG_READY.then(() => { if (!cartPanel.hidden) renderCart(SESSION_REGS); }).catch(() => {});
   cartAddForm.hidden = true;
   cartAddForm.innerHTML = "";
   cartPanel.hidden = false;
@@ -3797,6 +3804,10 @@ refreshSessionFromStorage();
       SESSION_REGS = allRegs;
       setSession({ phone: phoneNorm, since: Date.now() });
       renderTopBar();
+      // Don't render the invoice until the real config (race day etc.) is
+      // in — this single-getDoc path is faster than the config load and
+      // used to show the fallback race date on first visits.
+      await CONFIG_READY.catch(() => {});
       renderCart(allRegs);
     } catch (err) {
       console.warn("Direct invoice link failed, falling back to manual sign-in:", err);
