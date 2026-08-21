@@ -182,8 +182,12 @@ service cloud.firestore {
                        && registrationOpen(competitionId);
         // no window on the update: the "they finished" stamp must still land
         // if the submit straddles the closing minute, or the row sticks
-        // around looking like a drop-off forever
-        allow update: if isValidAttempt() && request.resource.data.phone == attemptId;
+        // around looking like a drop-off forever.
+        // Dashboard staff may also update freely — they stamp waSentAt /
+        // emailSentAt when they follow a drop-off up, fields the public
+        // validator would reject.
+        allow update: if canReadDashboard()
+                       || (isValidAttempt() && request.resource.data.phone == attemptId);
         allow delete: if isAdmin();
       }
 

@@ -2209,12 +2209,39 @@ function renderUnfinishedTab() {
       <td>${escapeHtml(cat?.name || a.categoryId || "—")}</td>
       <td>${escapeHtml(a.src || "—")}</td>
       <td class="actions">
-        ${wa ? `<a class="btn tiny sec" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
-        ${a.email ? `<a class="btn tiny sec" href="mailto:${encodeURIComponent(a.email)}?subject=${encodeURIComponent(currentEventLabel() + " — complete your registration")}&body=${encodeURIComponent(msg)}" target="_blank" rel="noopener">Email</a>` : ""}
+        ${wa ? `<a class="btn tiny ${a.waSentAt ? "sent" : "sec"}" data-unf-sent="waSent" data-unf-phone="${escapeHtml(a.phone)}"
+                  href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener"
+                  title="${a.waSentAt
+                    ? `Nudge sent ${fmtDate(a.waSentAt)}${a.waSentBy ? ` by ${escapeHtml(a.waSentBy)}` : ""} — click to send again`
+                    : "Open WhatsApp with the pre-written nudge"}">WhatsApp${a.waSentAt ? " ✓" : ""}</a>` : ""}
+        ${a.email ? `<a class="btn tiny ${a.emailSentAt ? "sent" : "sec"}" data-unf-sent="emailSent" data-unf-phone="${escapeHtml(a.phone)}"
+                  href="mailto:${encodeURIComponent(a.email)}?subject=${encodeURIComponent(currentEventLabel() + " — complete your registration")}&body=${encodeURIComponent(msg)}" target="_blank" rel="noopener"
+                  title="${a.emailSentAt
+                    ? `Nudge emailed ${fmtDate(a.emailSentAt)}${a.emailSentBy ? ` by ${escapeHtml(a.emailSentBy)}` : ""} — click to send again`
+                    : `Open an email to ${escapeHtml(a.email)} with the pre-written nudge`}">Email${a.emailSentAt ? " ✓" : ""}</a>` : ""}
         <button class="btn tiny danger" data-unf="${escapeHtml(a.phone)}">Dismiss</button>
       </td>
     </tr>`;
   }).join("");
+  // Stamp the follow-up on the attempt doc when a nudge link is used, so the
+  // button shows ✓ with who/when — same tracking as the registration rows.
+  // The link still opens normally; the stamp is a best-effort side write.
+  tbody.querySelectorAll("a[data-unf-sent]").forEach(el => {
+    el.addEventListener("click", () => {
+      const phone = el.dataset.unfPhone;
+      const field = el.dataset.unfSent;             // "waSent" | "emailSent"
+      const who = currentUserEmail || "unknown";
+      const i = attempts.findIndex(x => x.phone === phone);
+      if (i >= 0) attempts[i] = { ...attempts[i], [field + "At"]: new Date(), [field + "By"]: who };
+      updateDoc(doc(db, "competitions", COMPETITION_ID, "attempts", phone), {
+        [field + "At"]: serverTimestamp(),
+        [field + "By"]: who
+      }).catch(e => console.warn("nudge tracking failed:", e.message));
+      // Re-render on the next tick so the click's default (opening the
+      // link) happens on the ORIGINAL element first.
+      setTimeout(renderUnfinishedTab, 0);
+    });
+  });
   tbody.querySelectorAll("button[data-unf]").forEach(b => {
     b.addEventListener("click", async () => {
       if (!confirm("Remove this row? It will come back if they open the form again.")) return;
