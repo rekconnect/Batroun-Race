@@ -2145,6 +2145,21 @@ function unfinishedRows() {
     .sort((a, b) => (b.lastSeenAt?.toMillis?.() || 0) - (a.lastSeenAt?.toMillis?.() || 0));
 }
 
+// The follow-up nudge for somebody who walked away mid-form. Their category
+// choice is mentioned when we caught one; the registration link takes them
+// straight back to the form.
+function unfinishedMessageText(a) {
+  const event = currentEventLabel();
+  const cat = cats.find(c => c.id === a.categoryId);
+  const race = cat?.name ? ` for the ${cat.name}` : "";
+  return `Hello ${a.firstName || "there"}, this is the ${event} team.\n\n` +
+    `We noticed you started registering${race} but didn't finish - your spot is NOT saved yet. ` +
+    `Completing it takes about 2 minutes:\n` +
+    `https://register.batrounrace.com/\n\n` +
+    `If anything blocked you or you have a question, just reply to this message - happy to help.\n\n` +
+    `${event} Team`;
+}
+
 function renderUnfinishedTab() {
   const tbody = $("#unfTable tbody");
   if (!tbody) return;
@@ -2161,6 +2176,9 @@ function renderUnfinishedTab() {
     const name = `${a.firstName || ""} ${a.lastName || ""}`.trim() || "—";
     const cat = cats.find(c => c.id === a.categoryId);
     const wa = a.phone ? a.phone.replace(/[^\d]/g, "") : "";
+    // Pre-filled friendly nudge — one gentle reminder, everything typed for
+    // you. Plain text, no emojis (WhatsApp renders unknown ones as "?").
+    const msg = unfinishedMessageText(a);
     return `
     <tr>
       <td>${fmtDate(a.startedAt)}</td>
@@ -2171,8 +2189,8 @@ function renderUnfinishedTab() {
       <td>${escapeHtml(cat?.name || a.categoryId || "—")}</td>
       <td>${escapeHtml(a.src || "—")}</td>
       <td class="actions">
-        ${wa ? `<a class="btn tiny sec" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
-        ${a.email ? `<a class="btn tiny sec" href="mailto:${encodeURIComponent(a.email)}?subject=${encodeURIComponent("Your Batroun Race registration")}" target="_blank" rel="noopener">Email</a>` : ""}
+        ${wa ? `<a class="btn tiny sec" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
+        ${a.email ? `<a class="btn tiny sec" href="mailto:${encodeURIComponent(a.email)}?subject=${encodeURIComponent(currentEventLabel() + " — complete your registration")}&body=${encodeURIComponent(msg)}" target="_blank" rel="noopener">Email</a>` : ""}
         <button class="btn tiny danger" data-unf="${escapeHtml(a.phone)}">Dismiss</button>
       </td>
     </tr>`;
