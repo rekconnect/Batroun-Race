@@ -1029,6 +1029,26 @@ Your bib and QR ticket are sent the moment we receive the payment."></textarea>
       </div>
 
       <div class="card">
+        <h2>Payment reminder message (for runners who registered but never paid)</h2>
+        <p class="muted" style="margin:0 0 12px">
+          After the first payment-instructions message is sent, the pending
+          row's WA / Email buttons turn into <strong>Remind</strong> &mdash;
+          clicking them sends this firmer nudge instead of repeating the
+          first message. Leave blank for the built-in default. Plain text
+          only, no emojis. Placeholders:
+          <code>{name}</code>, <code>{ref}</code>,
+          <code>{link}</code> (their live invoice / payment link),
+          <code>{event}</code>.
+        </p>
+        <label>Custom reminder message — leave blank for the default</label>
+        <textarea id="thReminderWa" rows="8" placeholder="Hi {name}, a quick reminder from the {event} team.
+We received your registration (reference {ref}) but not your payment yet, so your spot is NOT confirmed and no bib is reserved for you.
+Complete it here in 2 minutes:
+{link}
+Once we confirm the payment you receive your bib number and QR ticket right away. If you no longer wish to join, just reply and we will free the spot."></textarea>
+      </div>
+
+      <div class="card">
         <h2>Second WhatsApp message (sent after payment is confirmed)</h2>
         <p class="muted" style="margin:0 0 12px">
           The message sent once you confirm a runner's payment &mdash; it
@@ -2853,16 +2873,20 @@ function renderRegTable() {
         <button class="btn tiny sec" data-act="edit" data-id="${r.id}" title="Edit participant details">Edit</button>
         ${r.paymentStatus === "pending"
           ? `<button class="btn tiny" data-act="pay" data-id="${r.id}">Confirm pay</button>
-             <button class="btn tiny ${r.pendingWaSentAt ? "sent" : "sec"}"
-               data-act="wa-pending" data-id="${r.id}"
-               title="${r.pendingWaSentAt
-                 ? `WhatsApp instructions already sent ${fmtDate(r.pendingWaSentAt)}${r.pendingWaSentBy ? ` by ${escapeHtml(r.pendingWaSentBy)}` : ""} — click to resend`
-                 : "Send Whish payment instructions on WhatsApp"}">
-               WA${r.pendingWaSentAt ? " ✓" : ""}
-             </button>
-             ${r.email ? `<button class="btn tiny ${r.pendingEmailSentAt ? "sent" : "sec"}" data-act="email-pending" data-id="${r.id}" title="${r.pendingEmailSentAt
-                 ? `Email already sent ${fmtDate(r.pendingEmailSentAt)}${r.pendingEmailSentBy ? ` by ${escapeHtml(r.pendingEmailSentBy)}` : ""} — click to resend`
-                 : `Email the same payment instructions to ${escapeHtml(r.email)}`}">Email${r.pendingEmailSentAt ? " ✓" : ""}</button>` : ""}` : ""}
+             ${!r.pendingWaSentAt
+               ? `<button class="btn tiny sec" data-act="wa-pending" data-id="${r.id}"
+                    title="Send Whish payment instructions on WhatsApp">WA</button>`
+               : `<button class="btn tiny ${r.reminderWaSentAt ? "sent" : "sec"}" data-act="wa-remind" data-id="${r.id}"
+                    title="${r.reminderWaSentAt
+                      ? `Reminder sent ${fmtDate(r.reminderWaSentAt)}${r.reminderWaSentBy ? ` by ${escapeHtml(r.reminderWaSentBy)}` : ""} — click to send again`
+                      : `Instructions sent ${fmtDate(r.pendingWaSentAt)}${r.pendingWaSentBy ? ` by ${escapeHtml(r.pendingWaSentBy)}` : ""}. Click to send a payment reminder on WhatsApp`}">Remind${r.reminderWaSentAt ? " ✓" : ""}</button>`}
+             ${r.email ? (!r.pendingEmailSentAt
+               ? `<button class="btn tiny sec" data-act="email-pending" data-id="${r.id}"
+                    title="Email the payment instructions to ${escapeHtml(r.email)}">Email</button>`
+               : `<button class="btn tiny ${r.reminderEmailSentAt ? "sent" : "sec"}" data-act="email-remind" data-id="${r.id}"
+                    title="${r.reminderEmailSentAt
+                      ? `Reminder emailed ${fmtDate(r.reminderEmailSentAt)}${r.reminderEmailSentBy ? ` by ${escapeHtml(r.reminderEmailSentBy)}` : ""} — click to send again`
+                      : `Email sent ${fmtDate(r.pendingEmailSentAt)}${r.pendingEmailSentBy ? ` by ${escapeHtml(r.pendingEmailSentBy)}` : ""}. Click to email a payment reminder`}">Remind ✉${r.reminderEmailSentAt ? " ✓" : ""}</button>`) : ""}` : ""}
         ${r.paymentStatus === "free" && !r.bibNumber
           ? `<button class="btn tiny" data-act="pay" data-id="${r.id}" title="Assign a bib number and send the QR ticket on WhatsApp">Assign bib</button>` : ""}
         ${(r.paymentStatus === "paid" || r.paymentStatus === "free") && r.bibNumber
@@ -2939,6 +2963,17 @@ function renderRegTable() {
         if (!r.email) { toast("No email address on record", true); return; }
         markSent(r, "pendingEmailSent");
         sendEmail(r, "pending");
+      }
+      if (b.dataset.act === "email-remind") {
+        if (!r.email) { toast("No email address on record", true); return; }
+        markSent(r, "reminderEmailSent");
+        sendEmail(r, "reminder");
+      }
+      if (b.dataset.act === "wa-remind") {
+        const waUrl = buildReminderWhatsAppUrl(r);
+        if (!waUrl) { toast("No phone number on record", true); return; }
+        markSent(r, "reminderWaSent");
+        window.open(waUrl, "_blank", "noopener");
       }
       if (b.dataset.act === "wa-pending") {
         const waUrl = buildPendingWhatsAppUrl(r);
@@ -5657,6 +5692,15 @@ const DEFAULT_PENDING_MSG =
   `Spots are limited, so confirming early helps us reserve your place.\n` +
   `Your bib and QR ticket are sent the moment we receive the payment.`;
 
+const DEFAULT_REMINDER_MSG =
+  `Hi {name}, a quick reminder from the {event} team.\n` +
+  `We received your registration (reference {ref}) but not your payment yet, ` +
+  `so your spot is NOT confirmed and no bib is reserved for you.\n` +
+  `Complete it here in 2 minutes:\n` +
+  `{link}\n` +
+  `Once we confirm the payment you receive your bib number and QR ticket right away. ` +
+  `If you no longer wish to join, just reply and we will free the spot.`;
+
 const DEFAULT_CONFIRMED_MSG =
   `Hi {name}, your {event} registration is confirmed!\n\n` +
   `Status: PAYMENT RECEIVED\n` +
@@ -5751,6 +5795,20 @@ function pendingMessageText(r) {
     .replace(/\{event\}/g, currentEventLabel());
 }
 
+// Payment reminder: a firmer nudge for a runner whose first message went
+// out but who still hasn't paid. Same placeholders as the first message.
+function reminderMessageText(r) {
+  const ref = r.whishReference || r.id || "";
+  const invoiceUrl = `https://register.batrounrace.com/?signin=${encodeURIComponent(ref)}`;
+  const template = (theme && theme.reminderWaText && theme.reminderWaText.trim())
+    || DEFAULT_REMINDER_MSG;
+  return template
+    .replace(/\{name\}/g,  r.firstName || "")
+    .replace(/\{ref\}/g,   ref)
+    .replace(/\{link\}/g,  invoiceUrl)
+    .replace(/\{event\}/g, currentEventLabel());
+}
+
 // Post-payment / "second" message: confirmation + bib + ticket link.
 function confirmedMessageText(r) {
   const ticketUrl = buildTicketUrl(r);
@@ -5788,6 +5846,12 @@ function buildPendingWhatsAppUrl(r) {
   return `https://wa.me/${phone}?text=${encodeURIComponent(pendingMessageText(r))}`;
 }
 
+function buildReminderWhatsAppUrl(r) {
+  const phone = String(r.phone || "").replace(/\D/g, "");
+  if (!phone) return null;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(reminderMessageText(r))}`;
+}
+
 function buildWhatsAppUrl(r) {
   // Phone is already canonical (e.g. "96171503555") because the registration
   // doc ID is normalizePhone(...). Strip any leftover non-digits to be safe.
@@ -5806,8 +5870,12 @@ function emailPartsFor(r, kind) {
   if (!to) return null;
   const subject = kind === "pending"
     ? `${currentEventLabel()} — Registration received, payment needed`
+    : kind === "reminder"
+    ? `${currentEventLabel()} — Reminder: your spot is not confirmed yet`
     : `${currentEventLabel()} — Registration confirmed, your race ticket`;
-  const body = kind === "pending" ? pendingMessageText(r) : confirmedMessageText(r);
+  const body = kind === "pending"  ? pendingMessageText(r)
+             : kind === "reminder" ? reminderMessageText(r)
+             : confirmedMessageText(r);
   return { to, subject, body };
 }
 
@@ -7218,6 +7286,7 @@ function loadThemeIntoEditor(t) {
   // saved custom value, or the built-in default) so the admin can see and
   // edit the wording directly — not stare at an empty field.
   $("#thPendingWa").value      = t.pendingWaText   || DEFAULT_PENDING_MSG;
+  $("#thReminderWa").value     = t.reminderWaText  || DEFAULT_REMINDER_MSG;
   $("#thConfirmedWa").value    = t.confirmedWaText || DEFAULT_CONFIRMED_MSG;
   // Confirmation screen — full bilingual copy.
   $("#thWhishConfirm").value    = t.whishConfirmText   || DEFAULT_WHISH_CONFIRM;
@@ -7773,6 +7842,7 @@ $("#themeSaveBtn").addEventListener("click", async () => {
         invoiceHowTo:       $("#thInvoiceHowTo").value.trim()   || null,
         invoiceHowToAr:     $("#thInvoiceHowToAr").value.trim() || null,
         pendingWaText:    $("#thPendingWa").value.trim()    || null,
+        reminderWaText:   $("#thReminderWa").value.trim()   || null,
         confirmedWaText:  $("#thConfirmedWa").value.trim()  || null,
         confirmHeading:    $("#thConfirmHeading").value.trim()    || null,
         confirmHeadingAr:  $("#thConfirmHeadingAr").value.trim()  || null,
