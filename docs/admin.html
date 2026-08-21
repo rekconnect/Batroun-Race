@@ -2150,6 +2150,10 @@ function rerenderAllTables() {
   renderUnfinishedTab();
 }
 
+// Small inline WhatsApp glyph for buttons — pairs with the ✉ used on the
+// email buttons so the two channels are recognizable at a glance.
+const WA_GLYPH = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style="vertical-align:-1px" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.885-9.885 9.885m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>`;
+
 // ===== Unfinished registrations =====
 // The public form leaves a doc under /attempts once a visitor is reachable,
 // and stamps it completed when the registration lands. Anything left
@@ -2213,12 +2217,12 @@ function renderUnfinishedTab() {
                   href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener"
                   title="${a.waSentAt
                     ? `Nudge sent ${fmtDate(a.waSentAt)}${a.waSentBy ? ` by ${escapeHtml(a.waSentBy)}` : ""} — click to send again`
-                    : "Open WhatsApp with the pre-written nudge"}">WhatsApp${a.waSentAt ? " ✓" : ""}</a>` : ""}
+                    : "Open WhatsApp with the pre-written nudge"}">WhatsApp ${WA_GLYPH}${a.waSentAt ? " ✓" : ""}</a>` : ""}
         ${a.email ? `<a class="btn tiny ${a.emailSentAt ? "sent" : "sec"}" data-unf-sent="emailSent" data-unf-phone="${escapeHtml(a.phone)}"
                   href="mailto:${encodeURIComponent(a.email)}?subject=${encodeURIComponent(currentEventLabel() + " — complete your registration")}&body=${encodeURIComponent(msg)}" target="_blank" rel="noopener"
                   title="${a.emailSentAt
                     ? `Nudge emailed ${fmtDate(a.emailSentAt)}${a.emailSentBy ? ` by ${escapeHtml(a.emailSentBy)}` : ""} — click to send again`
-                    : `Open an email to ${escapeHtml(a.email)} with the pre-written nudge`}">Email${a.emailSentAt ? " ✓" : ""}</a>` : ""}
+                    : `Open an email to ${escapeHtml(a.email)} with the pre-written nudge`}">Email ✉${a.emailSentAt ? " ✓" : ""}</a>` : ""}
         <button class="btn tiny danger" data-unf="${escapeHtml(a.phone)}">Dismiss</button>
       </td>
     </tr>`;
@@ -2902,14 +2906,14 @@ function renderRegTable() {
           ? `<button class="btn tiny" data-act="pay" data-id="${r.id}">Confirm pay</button>
              ${!r.pendingWaSentAt
                ? `<button class="btn tiny sec" data-act="wa-pending" data-id="${r.id}"
-                    title="Send Whish payment instructions on WhatsApp">WA</button>`
+                    title="Send Whish payment instructions on WhatsApp">WA ${WA_GLYPH}</button>`
                : `<button class="btn tiny ${r.reminderWaSentAt ? "sent" : "sec"}" data-act="wa-remind" data-id="${r.id}"
                     title="${r.reminderWaSentAt
                       ? `Reminder sent ${fmtDate(r.reminderWaSentAt)}${r.reminderWaSentBy ? ` by ${escapeHtml(r.reminderWaSentBy)}` : ""} — click to send again`
-                      : `Instructions sent ${fmtDate(r.pendingWaSentAt)}${r.pendingWaSentBy ? ` by ${escapeHtml(r.pendingWaSentBy)}` : ""}. Click to send a payment reminder on WhatsApp`}">Remind${r.reminderWaSentAt ? " ✓" : ""}</button>`}
+                      : `Instructions sent ${fmtDate(r.pendingWaSentAt)}${r.pendingWaSentBy ? ` by ${escapeHtml(r.pendingWaSentBy)}` : ""}. Click to send a payment reminder on WhatsApp`}">Remind ${WA_GLYPH}${r.reminderWaSentAt ? " ✓" : ""}</button>`}
              ${r.email ? (!r.pendingEmailSentAt
                ? `<button class="btn tiny sec" data-act="email-pending" data-id="${r.id}"
-                    title="Email the payment instructions to ${escapeHtml(r.email)}">Email</button>`
+                    title="Email the payment instructions to ${escapeHtml(r.email)}">Email ✉</button>`
                : `<button class="btn tiny ${r.reminderEmailSentAt ? "sent" : "sec"}" data-act="email-remind" data-id="${r.id}"
                     title="${r.reminderEmailSentAt
                       ? `Reminder emailed ${fmtDate(r.reminderEmailSentAt)}${r.reminderEmailSentBy ? ` by ${escapeHtml(r.reminderEmailSentBy)}` : ""} — click to send again`
@@ -2919,10 +2923,10 @@ function renderRegTable() {
         ${(r.paymentStatus === "paid" || r.paymentStatus === "free") && r.bibNumber
           ? `<button class="btn tiny ${r.confirmedWaSentAt ? "sent" : "sec"}" data-act="wa" data-id="${r.id}" title="${r.confirmedWaSentAt
                  ? `Ticket WhatsApp already sent ${fmtDate(r.confirmedWaSentAt)}${r.confirmedWaSentBy ? ` by ${escapeHtml(r.confirmedWaSentBy)}` : ""} — click to resend`
-                 : `Resend WhatsApp ticket`}">WA${r.confirmedWaSentAt ? " ✓" : ""}</button>
+                 : `Resend WhatsApp ticket`}">WA ${WA_GLYPH}${r.confirmedWaSentAt ? " ✓" : ""}</button>
              ${r.email ? `<button class="btn tiny ${r.confirmedEmailSentAt ? "sent" : "sec"}" data-act="email" data-id="${r.id}" title="${r.confirmedEmailSentAt
                  ? `Ticket email already sent ${fmtDate(r.confirmedEmailSentAt)}${r.confirmedEmailSentBy ? ` by ${escapeHtml(r.confirmedEmailSentBy)}` : ""} — click to resend`
-                 : `Email the same ticket to ${escapeHtml(r.email)}`}">Email${r.confirmedEmailSentAt ? " ✓" : ""}</button>` : ""}` : ""}
+                 : `Email the same ticket to ${escapeHtml(r.email)}`}">Email ✉${r.confirmedEmailSentAt ? " ✓" : ""}</button>` : ""}` : ""}
         <button class="btn tiny danger" data-act="del" data-id="${r.id}" title="Delete (spam)">Delete</button>
       </td>
     </tr>
@@ -3274,10 +3278,10 @@ function renderConfirmedTab() {
           : `<button class="btn tiny" data-cact="checkin" data-id="${r.id}" title="Manually mark this runner's BIB as received">✓ BIB received</button>`}
         ${r.bibNumber ? `<button class="btn tiny ${r.confirmedWaSentAt ? "sent" : "sec"}" data-cact="wa" data-id="${r.id}" title="${r.confirmedWaSentAt
           ? `Ticket WhatsApp already sent ${fmtDate(r.confirmedWaSentAt)}${r.confirmedWaSentBy ? ` by ${escapeHtml(r.confirmedWaSentBy)}` : ""} — click to resend`
-          : `Resend WhatsApp ticket`}">WA${r.confirmedWaSentAt ? " ✓" : ""}</button>` : ""}
+          : `Resend WhatsApp ticket`}">WA ${WA_GLYPH}${r.confirmedWaSentAt ? " ✓" : ""}</button>` : ""}
         ${r.bibNumber && r.email ? `<button class="btn tiny ${r.confirmedEmailSentAt ? "sent" : "sec"}" data-cact="email" data-id="${r.id}" title="${r.confirmedEmailSentAt
           ? `Ticket email already sent ${fmtDate(r.confirmedEmailSentAt)}${r.confirmedEmailSentBy ? ` by ${escapeHtml(r.confirmedEmailSentBy)}` : ""} — click to resend`
-          : `Email the same ticket to ${escapeHtml(r.email)}`}">Email${r.confirmedEmailSentAt ? " ✓" : ""}</button>` : ""}
+          : `Email the same ticket to ${escapeHtml(r.email)}`}">Email ✉${r.confirmedEmailSentAt ? " ✓" : ""}</button>` : ""}
         <button class="btn tiny sec" data-cact="revert" data-id="${r.id}" title="Move back to Registrations as pending">↩ Revert</button>
         <button class="btn tiny danger" data-cact="del" data-id="${r.id}" title="Delete (soft, undoable for 10s)">Delete</button>
       </td>
@@ -6017,11 +6021,11 @@ function openConfirmPay(r) {
       <div class="muted" style="font-size:.85rem;margin-bottom:6px">Send the ticket after confirming:</div>
       <label class="inline" style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
         <input type="radio" name="sendVia" value="whatsapp" ${hasPhone ? "checked" : "disabled"}>
-        <span>WhatsApp${hasPhone ? "" : ` <span class="muted">(no phone on record)</span>`}</span>
+        <span>WhatsApp ${WA_GLYPH}${hasPhone ? "" : ` <span class="muted">(no phone on record)</span>`}</span>
       </label>
       <label class="inline" style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
         <input type="radio" name="sendVia" value="email" ${hasEmail ? (hasPhone ? "" : "checked") : "disabled"}>
-        <span>Email${hasEmail ? "" : ` <span class="muted">(no email on record)</span>`}</span>
+        <span>Email ✉${hasEmail ? "" : ` <span class="muted">(no email on record)</span>`}</span>
       </label>
       <label class="inline" style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
         <input type="radio" name="sendVia" value="none" ${(!hasPhone && !hasEmail) ? "checked" : ""}>
