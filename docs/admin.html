@@ -1963,9 +1963,9 @@ function showApp(user) {
 }
 
 function applyRoleVisibility() {
-  // Viewers (staff) see Registrations + Confirmed only. Sponsors and
-  // Expenses contain money/private contact info — admin-only.
-  const VIEWER_TABS = ["registrations", "confirmed", "result"];
+  // Viewers (staff) see Registrations + Confirmed + Results + Unfinished.
+  // Sponsors and Expenses contain money/private info — admin-only.
+  const VIEWER_TABS = ["registrations", "confirmed", "result", "unfinished"];
   document.querySelectorAll('nav.tabs button[data-tab]').forEach(btn => {
     if (userRole === "viewer" && !VIEWER_TABS.includes(btn.dataset.tab)) {
       btn.style.display = "none";
@@ -2223,7 +2223,7 @@ function renderUnfinishedTab() {
                   title="${a.emailSentAt
                     ? `Nudge emailed ${fmtDate(a.emailSentAt)}${a.emailSentBy ? ` by ${escapeHtml(a.emailSentBy)}` : ""} — click to send again`
                     : `Open an email to ${escapeHtml(a.email)} with the pre-written nudge`}">Email ✉${a.emailSentAt ? " ✓" : ""}</a>` : ""}
-        <button class="btn tiny danger" data-unf="${escapeHtml(a.phone)}">Dismiss</button>
+        ${userRole === "admin" ? `<button class="btn tiny danger" data-unf="${escapeHtml(a.phone)}">Dismiss</button>` : ""}
       </td>
     </tr>`;
   }).join("");
