@@ -1049,6 +1049,30 @@ Once we confirm the payment you receive your bib number and QR ticket right away
       </div>
 
       <div class="card">
+        <h2>Unfinished-registration nudge (Unfinished tab)</h2>
+        <p class="muted" style="margin:0 0 12px">
+          The message behind the WhatsApp / Email buttons on the
+          <strong>Unfinished</strong> tab &mdash; for visitors who started the
+          form and never submitted. Leave blank for the built-in default.
+          Plain text only, no emojis. Placeholders:
+          <code>{name}</code> (first name, or "there"),
+          <code>{race}</code> (&rarr; " for the 5 KM Race" when their category
+          was captured, empty otherwise &mdash; "for the" is included),
+          <code>{link}</code> (the registration page),
+          <code>{event}</code>.
+        </p>
+        <label>Custom nudge message — leave blank for the default</label>
+        <textarea id="thUnfinishedWa" rows="8" placeholder="Hello {name}, this is the {event} team.
+
+We noticed you started registering{race} but didn't finish - your spot is NOT saved yet. Completing it takes about 2 minutes:
+{link}
+
+If anything blocked you or you have a question, just reply to this message - happy to help.
+
+{event} Team"></textarea>
+      </div>
+
+      <div class="card">
         <h2>Second WhatsApp message (sent after payment is confirmed)</h2>
         <p class="muted" style="margin:0 0 12px">
           The message sent once you confirm a runner's payment &mdash; it
@@ -2169,19 +2193,21 @@ function unfinishedRows() {
     .sort((a, b) => (b.lastSeenAt?.toMillis?.() || 0) - (a.lastSeenAt?.toMillis?.() || 0));
 }
 
-// The follow-up nudge for somebody who walked away mid-form. Their category
-// choice is mentioned when we caught one; the registration link takes them
-// straight back to the form.
+// The follow-up nudge for somebody who walked away mid-form. Editable in
+// Theme & copy (theme.unfinishedWaText), same pattern as the other message
+// templates. Placeholders: {name} (first name, or "there"), {event},
+// {link} (the registration page), {race} (" for the <category>" when their
+// category choice was captured, empty otherwise — the space and "for the"
+// are included so the sentence reads naturally either way).
 function unfinishedMessageText(a) {
-  const event = currentEventLabel();
   const cat = cats.find(c => c.id === a.categoryId);
-  const race = cat?.name ? ` for the ${cat.name}` : "";
-  return `Hello ${a.firstName || "there"}, this is the ${event} team.\n\n` +
-    `We noticed you started registering${race} but didn't finish - your spot is NOT saved yet. ` +
-    `Completing it takes about 2 minutes:\n` +
-    `https://register.batrounrace.com/\n\n` +
-    `If anything blocked you or you have a question, just reply to this message - happy to help.\n\n` +
-    `${event} Team`;
+  const template = (theme && theme.unfinishedWaText && theme.unfinishedWaText.trim())
+    || DEFAULT_UNFINISHED_MSG;
+  return template
+    .replace(/\{name\}/g,  a.firstName || "there")
+    .replace(/\{race\}/g,  cat?.name ? ` for the ${cat.name}` : "")
+    .replace(/\{link\}/g,  "https://register.batrounrace.com/")
+    .replace(/\{event\}/g, currentEventLabel());
 }
 
 function renderUnfinishedTab() {
@@ -5723,6 +5749,14 @@ const DEFAULT_PENDING_MSG =
   `Spots are limited, so confirming early helps us reserve your place.\n` +
   `Your bib and QR ticket are sent the moment we receive the payment.`;
 
+const DEFAULT_UNFINISHED_MSG =
+  `Hello {name}, this is the {event} team.\n\n` +
+  `We noticed you started registering{race} but didn't finish - your spot is NOT saved yet. ` +
+  `Completing it takes about 2 minutes:\n` +
+  `{link}\n\n` +
+  `If anything blocked you or you have a question, just reply to this message - happy to help.\n\n` +
+  `{event} Team`;
+
 const DEFAULT_REMINDER_MSG =
   `Hi {name}, a quick reminder from the {event} team.\n` +
   `We received your registration (reference {ref}) but not your payment yet, ` +
@@ -7318,6 +7352,7 @@ function loadThemeIntoEditor(t) {
   // edit the wording directly — not stare at an empty field.
   $("#thPendingWa").value      = t.pendingWaText   || DEFAULT_PENDING_MSG;
   $("#thReminderWa").value     = t.reminderWaText  || DEFAULT_REMINDER_MSG;
+  $("#thUnfinishedWa").value   = t.unfinishedWaText || DEFAULT_UNFINISHED_MSG;
   $("#thConfirmedWa").value    = t.confirmedWaText || DEFAULT_CONFIRMED_MSG;
   // Confirmation screen — full bilingual copy.
   $("#thWhishConfirm").value    = t.whishConfirmText   || DEFAULT_WHISH_CONFIRM;
@@ -7874,6 +7909,7 @@ $("#themeSaveBtn").addEventListener("click", async () => {
         invoiceHowToAr:     $("#thInvoiceHowToAr").value.trim() || null,
         pendingWaText:    $("#thPendingWa").value.trim()    || null,
         reminderWaText:   $("#thReminderWa").value.trim()   || null,
+        unfinishedWaText: $("#thUnfinishedWa").value.trim() || null,
         confirmedWaText:  $("#thConfirmedWa").value.trim()  || null,
         confirmHeading:    $("#thConfirmHeading").value.trim()    || null,
         confirmHeadingAr:  $("#thConfirmHeadingAr").value.trim()  || null,
