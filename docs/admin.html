@@ -5491,11 +5491,13 @@ document.getElementById("confirmedExportBtn")?.addEventListener("click", () => {
   const rows = confirmedSorted(confirmedFiltered());
   if (!rows.length) { toast("Nothing to export"); return; }
   const headers = ["reference","firstName","lastName","email","phone","gender","dob","age","tshirt","club","category","subCategory",
-                   "bib","amount","status","rank","result","paidAt","scannedAt","scannedBy","checkedInAt","checkedInBy"];
-  const csv = [headers.join(",")].concat(rows.map(r => [
+                   "bib","amount","status",...customExportHeaders(),
+                   "rank","result","paidAt","scannedAt","scannedBy","checkedInAt","checkedInBy"];
+  const csv = [headers.map(csvCell).join(",")].concat(rows.map(r => [
     r.whishReference, r.firstName, r.lastName, r.email, r.phone, r.gender, r.dob, r.ageOnRaceDay, r.tshirtSize, r.club,
     r.categoryName, r.subQuestionAnswer, r.bibNumber, r.priceUSD,
-    r.paymentStatus, (r.rank != null ? r.rank : ""), r.result || "", r.paidAt ? fmtDate(r.paidAt) : "",
+    r.paymentStatus, ...customExportValues(r),
+    (r.rank != null ? r.rank : ""), r.result || "", r.paidAt ? fmtDate(r.paidAt) : "",
     r.scannedAt ? fmtDate(r.scannedAt) : "", r.scannedBy || "",
     r.checkedInAt ? fmtDate(r.checkedInAt) : "", r.checkedInBy || ""
   ].map(csvCell).join(","))).join("\n");
@@ -6588,12 +6590,14 @@ $("#exportCsvBtn").addEventListener("click", () => {
   const headers = ["reference","firstName","lastName","email","phone","dob","gender",
                    "nationality","country","city","category","subCategory","price","status","bibNumber",
                    "tshirt","bloodType","club","medicalNotes","emergencyName","emergencyPhone",
+                   ...customExportHeaders(),
                    "registeredAt","paidAt","checkedInAt","checkedInBy"];
-  const csv = [headers.join(",")].concat(rows.map(r => [
+  const csv = [headers.map(csvCell).join(",")].concat(rows.map(r => [
     r.whishReference, r.firstName, r.lastName, r.email, r.phone, r.dob, r.gender,
     r.nationality, r.country, r.city, r.categoryName, r.subQuestionAnswer, r.priceUSD,
     r.paymentStatus, r.bibNumber, r.tshirtSize, r.bloodType, r.club, r.medicalNotes,
     r.emergencyContactName, r.emergencyContactPhone,
+    ...customExportValues(r),
     r.registeredAt ? fmtDate(r.registeredAt) : "",
     r.paidAt ? fmtDate(r.paidAt) : "",
     r.checkedInAt ? fmtDate(r.checkedInAt) : "",
@@ -6612,6 +6616,20 @@ function csvCell(v) {
   if (v == null) return "";
   const s = String(v).replace(/"/g, '""');
   return /[",\n]/.test(s) ? `"${s}"` : s;
+}
+
+// Custom form fields (bus seats etc.) as extra export columns — one column
+// per field, labeled with the admin's own field label. Checkboxes export as
+// Yes / empty so a bus list can be filtered and counted straight in Excel.
+function customExportHeaders() {
+  return formFields.map(f => f.label || f.key);
+}
+function customExportValues(r) {
+  return formFields.map(f => {
+    const v = r.custom?.[f.key];
+    if (f.type === "checkbox") return v ? "Yes" : "";
+    return v ?? "";
+  });
 }
 
 // ===== Categories =====
