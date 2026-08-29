@@ -361,7 +361,6 @@
           </select>
           <button id="addParticipantBtn" class="btn">+ Add participant</button>
           <button id="exportCsvBtn" class="btn sec">Export CSV</button>
-          <button id="repriceBtn" class="btn sec" title="Set every PENDING registration's price to the current category price plus their own add-ons. Paid, free and deleted rows are never touched.">Reprice pending</button>
           <button id="clearFiltersBtn" class="btn sec">Clear filters</button>
         </div>
 
@@ -1998,9 +1997,6 @@ function applyRoleVisibility() {
       btn.style.display = "";
     }
   });
-  // Repricing changes money — admin-only, hidden for staff.
-  const repriceBtn = document.getElementById("repriceBtn");
-  if (repriceBtn) repriceBtn.style.display = userRole === "admin" ? "" : "none";
   // If viewer is currently on a forbidden tab, push them to Registrations
   if (userRole === "viewer") {
     const active = document.querySelector('nav.tabs button.active');
@@ -6614,48 +6610,6 @@ $("#exportCsvBtn").addEventListener("click", () => {
   a.download = `batroun-race-registrations-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
-});
-
-// Reprice every PENDING registration to the CURRENT category price plus
-// that runner's own add-ons (bus seats etc.). Used after an admin changes
-// a category's price: registrations freeze their price at submit time, so
-// rows created under the old price keep quoting it until repriced. Paid,
-// free and soft-deleted rows are never touched — money already settled
-// (or waived) must not silently change.
-$("#repriceBtn")?.addEventListener("click", async () => {
-  if (userRole !== "admin") { toast("Admin only.", true); return; }
-  const pending = regs.filter(r => !r.deletedAt && r.paymentStatus === "pending");
-  const changes = [];
-  for (const r of pending) {
-    const cat = cats.find(c => c.id === r.categoryId);
-    const base = cat ? (typeof cat.price === "number" ? cat.price : (cat.prices?.wave1 ?? null)) : null;
-    if (base == null) continue;              // category gone / no price set
-    const target = Math.round((base + (Number(r.addOnsUSD) || 0)) * 100) / 100;
-    if (target !== (Number(r.priceUSD) || 0)) changes.push({ r, target });
-  }
-  if (!changes.length) { toast("All pending registrations already match the current prices."); return; }
-  const preview = changes.slice(0, 6)
-    .map(({ r, target }) => `${r.firstName} ${r.lastName}: $${Number(r.priceUSD) || 0} → $${target}`)
-    .join("\n");
-  if (!confirm(
-    `Reprice ${changes.length} pending registration(s) to the current category price` +
-    ` (plus each runner's own add-ons)?\n\n${preview}${changes.length > 6 ? "\n…" : ""}` +
-    `\n\nPaid, free and deleted rows are not touched. Their invoices and any` +
-    ` future payment messages will show the new amount.`)) return;
-  try {
-    for (let i = 0; i < changes.length; i += 400) {   // stay under the 500-write batch cap
-      const batch = writeBatch(db);
-      changes.slice(i, i + 400).forEach(({ r, target }) => {
-        batch.update(doc(db, "competitions", COMPETITION_ID, "registrations", r.id), {
-          priceUSD: target,
-          repricedAt: serverTimestamp(),
-          repricedBy: currentUserEmail || "admin"
-        });
-      });
-      await batch.commit();
-    }
-    toast(`Repriced ${changes.length} registration(s).`);
-  } catch (e) { toast("Reprice failed: " + e.message, true); }
 });
 
 function csvCell(v) {
