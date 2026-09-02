@@ -99,7 +99,7 @@
   <div id="scannerScreen" hidden>
     <div id="qr-reader"></div>
     <div class="hint">Point the camera at the runner's QR code (on their phone or printout). Or paste a reference below.</div>
-    <input id="manualRef" type="text" placeholder="Or type the runner's reference code"
+    <input id="manualRef" type="text" placeholder="Type the code — last 4 characters are enough (e.g. A4K9)"
            style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.3);color:var(--ink);font:inherit;text-transform:uppercase;letter-spacing:1px">
     <button id="manualLookup" class="btn sec" style="margin-top:8px">Look up reference</button>
     <div id="result"></div>
@@ -183,6 +183,21 @@ setPersistence(auth, browserLocalPersistence).catch(() => {});
     }
   }
 }
+
+// This event's Whish reference prefix (e.g. "TAN-2026") — lets the manual
+// lookup accept just the 4-character tail of a code (all references share
+// the prefix, so typing it over and over at the check-in desk is pure
+// friction). Best-effort: without it, full codes still work.
+let REF_PREFIX = "";
+try {
+  const compSnap = await getDoc(doc(db, "competitions", COMPETITION_ID));
+  if (compSnap.exists()) {
+    const c = compSnap.data();
+    REF_PREFIX = (typeof c.refPrefix === "string" && c.refPrefix.trim())
+      ? c.refPrefix.trim().replace(/-+$/, "")
+      : (c.year ? "BTN-" + c.year : "");
+  }
+} catch (_) {}
 
 // Watch the admin-defined scanner field config
 onSnapshot(
@@ -312,8 +327,17 @@ async function onScanSuccess(decoded) {
 }
 
 $("#manualLookup").addEventListener("click", () => {
-  const v = $("#manualRef").value.trim().toUpperCase();
-  if (v) lookupAndShow(v);
+  let v = $("#manualRef").value.trim().toUpperCase();
+  if (!v) return;
+  // Staff can type just the tail of the code (e.g. "A4K9") — the event's
+  // prefix is filled in automatically. Anything containing "-" is treated
+  // as a complete reference and looked up as typed.
+  if (!v.includes("-") && REF_PREFIX) v = `${REF_PREFIX}-${v}`;
+  lookupAndShow(v);
+});
+// Enter in the box = pressing the button (phones' keyboards say "go").
+$("#manualRef").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("#manualLookup").click(); }
 });
 
 async function lookupAndShow(ref) {
