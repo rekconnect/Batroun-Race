@@ -322,6 +322,7 @@
       <div class="card">
         <div class="filters-grid" id="filtersBar">
           <input type="search" data-filter-id="search"      id="searchInput"     placeholder="Search anything…">
+          <input type="text"   data-filter-id="bib"         id="filterBib"       placeholder="Bib #" inputmode="numeric" style="max-width:110px">
           <input type="text"   data-filter-id="firstName"   id="filterFirst"     placeholder="First name">
           <input type="text"   data-filter-id="lastName"    id="filterLast"      placeholder="Last name">
           <input type="text"   data-filter-id="email"       id="filterEmail"     placeholder="Email">
@@ -406,6 +407,7 @@
       <div class="card">
         <div class="filters-grid">
           <input type="search" id="confirmedSearch" placeholder="Search name, ref, phone, email…">
+          <input type="search" id="confirmedBib" placeholder="Bib #" inputmode="numeric" style="max-width:110px">
           <select id="confirmedCategoryFilter"><option value="">All categories</option></select>
           <select id="confirmedSubCatFilter"><option value="">All age categories</option></select>
           <select id="confirmedGenderFilter"><option value="">All genders</option></select>
@@ -2347,6 +2349,7 @@ const sortState = { key: "registeredAt", dir: "desc" };
 // ---- Dashboard preferences (which filters / columns are visible) ----
 const DASHBOARD_FILTERS = [
   { id:"search",        label:"Search box (all fields)" },
+  { id:"bib",           label:"Bib number" },
   { id:"firstName",     label:"First name" },
   { id:"lastName",      label:"Last name" },
   { id:"email",         label:"Email" },
@@ -2411,7 +2414,7 @@ const DEFAULT_SCANNER_FIELDS = ["name","bibNumber","categoryName","subQuestionAn
 let scannerFields = DEFAULT_SCANNER_FIELDS.slice();
 
 const DEFAULT_PREFS = {
-  filters: { search:true, firstName:true, lastName:true, ageMin:true, ageMax:true,
+  filters: { search:true, bib:true, firstName:true, lastName:true, ageMin:true, ageMax:true,
              category:true, subCategory:true, status:true, checkedIn:false,
              email:false, phone:false, city:false, club:false, nationality:false,
              gender:false, tshirt:false, paymentMethod:false },
@@ -2751,7 +2754,7 @@ $("#prefsResetBtn").addEventListener("click", () => {
 });
 
 // Wire all filter inputs (visibility handled separately via prefs)
-["searchInput","filterFirst","filterLast","filterEmail","filterPhone","filterCity","filterClub","filterNat","filterAgeMin","filterAgeMax"]
+["searchInput","filterBib","filterFirst","filterLast","filterEmail","filterPhone","filterCity","filterClub","filterNat","filterAgeMin","filterAgeMax"]
   .forEach(id => { const el = $("#"+id); if (el) el.addEventListener("input", renderRegTable); });
 ["filterCategory","filterSubCategory","filterGender","filterTshirt","filterStatus","filterPaymentMethod","filterCheckedIn"]
   .forEach(id => { const el = $("#"+id); if (el) el.addEventListener("change", renderRegTable); });
@@ -2828,6 +2831,7 @@ function _activeFilter(filterId) { return prefs.filters[filterId]; } // ignored 
 
 function filteredRegs() {
   const q   = _val("searchInput").trim().toLowerCase();
+  const bib = _val("filterBib").trim();
   const fn  = _val("filterFirst").trim().toLowerCase();
   const ln  = _val("filterLast").trim().toLowerCase();
   const em  = _val("filterEmail").trim().toLowerCase();
@@ -2857,6 +2861,8 @@ function filteredRegs() {
     if (_activeFilter("paymentMethod")&& pm  && r.paymentMethod     !== pm)  return false;
     if (_activeFilter("checkedIn")    && ckd === "yes" && !r.checkedInAt)    return false;
     if (_activeFilter("checkedIn")    && ckd === "no"  &&  r.checkedInAt)    return false;
+    // Bib is an exact match — searching "1" must not drown in 10, 100, 12…
+    if (_activeFilter("bib") && bib && String(r.bibNumber ?? "") !== bib) return false;
     if (_activeFilter("firstName")   && fn && !(r.firstName  || "").toLowerCase().includes(fn)) return false;
     if (_activeFilter("lastName")    && ln && !(r.lastName   || "").toLowerCase().includes(ln)) return false;
     if (_activeFilter("email")       && em && !(r.email      || "").toLowerCase().includes(em)) return false;
@@ -3217,6 +3223,7 @@ function renderConfirmedFilters() {
 
 function confirmedFiltered() {
   const q       = ($("#confirmedSearch")?.value || "").trim().toLowerCase();
+  const bibQ    = ($("#confirmedBib")?.value || "").trim();
   const cat     = $("#confirmedCategoryFilter")?.value || "";
   const subcat  = $("#confirmedSubCatFilter")?.value || "";
   const gender  = $("#confirmedGenderFilter")?.value || "";
@@ -3224,6 +3231,8 @@ function confirmedFiltered() {
   const payType = $("#confirmedPayType")?.value || "";
   const ci      = $("#confirmedCheckedIn")?.value || "";
   return confirmedSourceRegs().filter(r => {
+    // Bib is an exact match — searching "1" must not drown in 10, 100, 12…
+    if (bibQ && String(r.bibNumber ?? "") !== bibQ) return false;
     if (cat && r.categoryId !== cat) return false;
     if (subcat && String(r.subQuestionAnswer || "").trim() !== subcat) return false;
     if (gender && String(r.gender || "").trim() !== gender) return false;
@@ -5472,7 +5481,7 @@ async function revertToPending(r) {
 }
 
 // Wire confirmed-tab filters + sort
-["confirmedSearch","confirmedCategoryFilter","confirmedSubCatFilter","confirmedGenderFilter",
+["confirmedSearch","confirmedBib","confirmedCategoryFilter","confirmedSubCatFilter","confirmedGenderFilter",
  "confirmedTshirtFilter","confirmedPayType","confirmedCheckedIn"].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
