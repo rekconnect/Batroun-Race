@@ -2057,6 +2057,10 @@ function startListeners() {
     snap => {
       regs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       rerenderAllTables();
+      // Self-heal the scanner's bib→ref index once per session, after the
+      // data settles (covers bibs changed via the editor, restores, hand
+      // edits — anything the confirm/revert hooks didn't see).
+      setTimeout(syncBibIndex, 4000);
     },
     err => toast("Registrations listener: " + err.message, true)
   );
@@ -2174,6 +2178,46 @@ function startListeners() {
 function rerenderAllTables() {
   renderStats(); renderRegTable(); renderBackupTable(); renderConfirmedTab(); renderResultTab();
   renderUnfinishedTab();
+}
+
+// ===== Bib → reference index (for the scanner) =====
+// /bibIndex/{bib} → { ref } lets scanner-only accounts find a runner by
+// bib with two get-by-id reads — they have no query permission on the
+// registrations table (that's what keeps it unlistable on a borrowed
+// phone). Kept fresh three ways: the confirm transaction writes it, the
+// revert deletes it, and this once-per-admin-session sweep diffs the
+// whole index against the live registrations and repairs anything else
+// (editor bib changes, restores, hand edits). The scanner also verifies
+// the runner really holds the bib before showing the card, so a stale
+// entry can never check in the wrong person.
+let bibIndexSynced = false;
+async function syncBibIndex() {
+  if (bibIndexSynced || userRole !== "admin") return;
+  bibIndexSynced = true;
+  try {
+    const want = new Map();   // bib (string) → ref
+    regs.filter(r => !r.deletedAt && r.bibNumber != null)
+        .forEach(r => want.set(String(r.bibNumber), r.id));
+    const snap = await getDocs(collection(db, "competitions", COMPETITION_ID, "bibIndex"));
+    const have = new Map(snap.docs.map(d => [d.id, d.data().ref]));
+    const ops = [];
+    for (const [bib, ref] of want) if (have.get(bib) !== ref) ops.push({ bib, ref });          // set / fix
+    for (const bib of have.keys()) if (!want.has(bib)) ops.push({ bib, ref: null });           // remove stale
+    if (!ops.length) return;
+    for (let i = 0; i < ops.length; i += 400) {   // stay under the 500-write batch cap
+      const batch = writeBatch(db);
+      ops.slice(i, i + 400).forEach(({ bib, ref }) => {
+        const dref = doc(db, "competitions", COMPETITION_ID, "bibIndex", bib);
+        if (ref) batch.set(dref, { ref, updatedAt: serverTimestamp() });
+        else batch.delete(dref);
+      });
+      await batch.commit();
+    }
+    console.info(`bib index synced: ${ops.length} change(s)`);
+  } catch (e) {
+    console.warn("bib index sync:", e.message);
+    bibIndexSynced = false;   // retry on the next snapshot tick
+  }
 }
 
 // Small inline WhatsApp glyph for buttons — pairs with the ✉ used on the
@@ -5473,6 +5517,12 @@ async function revertToPending(r) {
       checkedInAt: null,
       checkedInBy: null
     });
+    // Free the bib in the scanner's bib→ref index too (best-effort — the
+    // admin-session sweep repairs any miss, and the scanner re-verifies).
+    if (r.bibNumber != null) {
+      deleteDoc(doc(db, "competitions", COMPETITION_ID, "bibIndex", String(r.bibNumber)))
+        .catch(e => console.warn("bib index cleanup:", e.message));
+    }
     toast(`${name} moved back to Registrations (pending)`);
   } catch (e) {
     console.error(e);
@@ -6149,6 +6199,10 @@ function openConfirmPay(r) {
           paidAt: serverTimestamp(),
           ...sentPatch
         });
+        // Bib → reference index: lets scanner-only staff find a runner by
+        // bib with plain get-by-id reads (they have no query permission).
+        tx.set(doc(db, "competitions", COMPETITION_ID, "bibIndex", String(bib)),
+               { ref: r.id, updatedAt: serverTimestamp() });
         return bib;
       });
       closeModal();

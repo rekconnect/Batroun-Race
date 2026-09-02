@@ -343,10 +343,12 @@ $("#manualRef").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); $("#manualLookup").click(); }
 });
 
-// Bib-number search. Needs a QUERY (find the doc whose bibNumber matches),
-// which the rules only allow for admin/staff — scanner-only accounts can
-// fetch a registration solely by its exact reference, keeping the table
-// unlistable. They get a clear message instead of a cryptic error.
+// Bib-number search. Primary path is the /bibIndex collection (bib → ref),
+// which every check-in role — scanner-only included — may read by exact id.
+// The pointed-at registration is VERIFIED to really hold that bib (and not
+// be deleted) before showing the card, so a stale index entry can never
+// check in the wrong runner. Staff/admin additionally fall back to a
+// direct query, which covers an index entry that hasn't been written yet.
 $("#bibLookup").addEventListener("click", async () => {
   const raw = $("#manualBib").value.trim();
   if (!raw) return;
@@ -356,26 +358,37 @@ $("#bibLookup").addEventListener("click", async () => {
     return;
   }
   $("#result").innerHTML = `<div class="result"><h2 style="color:var(--muted)">Looking up…</h2><code>Bib ${n}</code></div>`;
+  const notFound = () => {
+    $("#result").innerHTML = `<div class="result bad"><h2>❌ Not found</h2><div class="row"><span class="k">Bib</span><span class="v"><code>${n}</code></span></div><div class="row"><span class="k">Status</span><span class="v">No runner has this bib number. If it was assigned moments ago, try their reference code.</span></div></div>`;
+    addRescan();
+  };
   try {
-    const regsCol = collection(db, "competitions", COMPETITION_ID, "registrations");
-    let snap = await getDocs(query(regsCol, where("bibNumber", "==", n), limit(3)));
-    if (snap.empty) {   // legacy docs occasionally stored the bib as a string
-      snap = await getDocs(query(regsCol, where("bibNumber", "==", String(n)), limit(3)));
+    // 1) bib → ref via the index, then verify the runner still holds it.
+    const idxSnap = await getDoc(doc(db, "competitions", COMPETITION_ID, "bibIndex", String(n)));
+    if (idxSnap.exists() && idxSnap.data().ref) {
+      const ref = idxSnap.data().ref;
+      const regSnap = await getDoc(doc(db, "competitions", COMPETITION_ID, "registrations", ref));
+      if (regSnap.exists() && !regSnap.data().deletedAt
+          && String(regSnap.data().bibNumber ?? "") === String(n)) {
+        await lookupAndShow(ref);   // normal path: scan tracking, bib colour, card
+        return;
+      }
     }
-    const hit = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(r => !r.deletedAt);
-    if (!hit) {
-      $("#result").innerHTML = `<div class="result bad"><h2>❌ Not found</h2><div class="row"><span class="k">Bib</span><span class="v"><code>${n}</code></span></div><div class="row"><span class="k">Status</span><span class="v">No runner has this bib number.</span></div></div>`;
-      addRescan();
-      return;
-    }
-    // Reuse the normal path (scan tracking, bib colour, result card).
-    await lookupAndShow(hit.id);
+    // 2) Fallback: direct query (admin/staff only — scanner-only accounts
+    //    have no query permission, for them a missing index entry is the
+    //    end of the road and reads as not-found).
+    try {
+      const regsCol = collection(db, "competitions", COMPETITION_ID, "registrations");
+      let snap = await getDocs(query(regsCol, where("bibNumber", "==", n), limit(3)));
+      if (snap.empty) {   // legacy docs occasionally stored the bib as a string
+        snap = await getDocs(query(regsCol, where("bibNumber", "==", String(n)), limit(3)));
+      }
+      const hit = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(r => !r.deletedAt);
+      if (hit) { await lookupAndShow(hit.id); return; }
+    } catch (_) { /* permission-denied for scanner-only → treat as not found */ }
+    notFound();
   } catch (e) {
-    if (/permission|insufficient/i.test(e.message || "")) {
-      $("#result").innerHTML = `<div class="result bad"><h2>Staff access needed</h2><div class="row"><span class="k">Bib search</span><span class="v">Scanner-only accounts can look up runners by QR code or reference code. Ask an admin to upgrade this account to staff for bib search.</span></div></div>`;
-    } else {
-      $("#result").innerHTML = `<div class="result bad"><h2>❌ Error</h2><div class="row"><span class="k">Details</span><span class="v">${e.message}</span></div></div>`;
-    }
+    $("#result").innerHTML = `<div class="result bad"><h2>❌ Error</h2><div class="row"><span class="k">Details</span><span class="v">${e.message}</span></div></div>`;
   }
 });
 $("#manualBib").addEventListener("keydown", (e) => {
