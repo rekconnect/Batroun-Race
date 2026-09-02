@@ -102,6 +102,9 @@
     <input id="manualRef" type="text" placeholder="Type the code — last 4 characters are enough (e.g. A4K9)"
            style="width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.3);color:var(--ink);font:inherit;text-transform:uppercase;letter-spacing:1px">
     <button id="manualLookup" class="btn sec" style="margin-top:8px">Look up reference</button>
+    <input id="manualBib" type="text" inputmode="numeric" placeholder="Or search by bib number"
+           style="width:100%;margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.3);color:var(--ink);font:inherit;letter-spacing:1px">
+    <button id="bibLookup" class="btn sec" style="margin-top:8px">Look up bib</button>
     <div id="result"></div>
   </div>
 </div>
@@ -114,7 +117,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 import {
   getFirestore, collection, query, where, getDocs, doc, getDoc, updateDoc,
-  onSnapshot, serverTimestamp
+  onSnapshot, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -340,6 +343,45 @@ $("#manualRef").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); $("#manualLookup").click(); }
 });
 
+// Bib-number search. Needs a QUERY (find the doc whose bibNumber matches),
+// which the rules only allow for admin/staff — scanner-only accounts can
+// fetch a registration solely by its exact reference, keeping the table
+// unlistable. They get a clear message instead of a cryptic error.
+$("#bibLookup").addEventListener("click", async () => {
+  const raw = $("#manualBib").value.trim();
+  if (!raw) return;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) {
+    $("#result").innerHTML = `<div class="result bad"><h2>❌ Not a number</h2><div class="row"><span class="k">Typed</span><span class="v"><code>${raw}</code></span></div></div>`;
+    return;
+  }
+  $("#result").innerHTML = `<div class="result"><h2 style="color:var(--muted)">Looking up…</h2><code>Bib ${n}</code></div>`;
+  try {
+    const regsCol = collection(db, "competitions", COMPETITION_ID, "registrations");
+    let snap = await getDocs(query(regsCol, where("bibNumber", "==", n), limit(3)));
+    if (snap.empty) {   // legacy docs occasionally stored the bib as a string
+      snap = await getDocs(query(regsCol, where("bibNumber", "==", String(n)), limit(3)));
+    }
+    const hit = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(r => !r.deletedAt);
+    if (!hit) {
+      $("#result").innerHTML = `<div class="result bad"><h2>❌ Not found</h2><div class="row"><span class="k">Bib</span><span class="v"><code>${n}</code></span></div><div class="row"><span class="k">Status</span><span class="v">No runner has this bib number.</span></div></div>`;
+      addRescan();
+      return;
+    }
+    // Reuse the normal path (scan tracking, bib colour, result card).
+    await lookupAndShow(hit.id);
+  } catch (e) {
+    if (/permission|insufficient/i.test(e.message || "")) {
+      $("#result").innerHTML = `<div class="result bad"><h2>Staff access needed</h2><div class="row"><span class="k">Bib search</span><span class="v">Scanner-only accounts can look up runners by QR code or reference code. Ask an admin to upgrade this account to staff for bib search.</span></div></div>`;
+    } else {
+      $("#result").innerHTML = `<div class="result bad"><h2>❌ Error</h2><div class="row"><span class="k">Details</span><span class="v">${e.message}</span></div></div>`;
+    }
+  }
+});
+$("#manualBib").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("#bibLookup").click(); }
+});
+
 async function lookupAndShow(ref) {
   $("#result").innerHTML = `<div class="result"><h2 style="color:var(--muted)">Looking up…</h2><code>${ref}</code></div>`;
   try {
@@ -507,6 +549,7 @@ function addRescan() {
 function rescan() {
   $("#result").innerHTML = "";
   $("#manualRef").value = "";
+  $("#manualBib").value = "";
   if (scanner) scanner.resume();
   else startScanner();
 }
