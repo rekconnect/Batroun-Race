@@ -1161,13 +1161,19 @@ let EMAIL_CFG = null;    // /config/email — Apps Script webhook for auto-email
 let RAW_THEME = null;    // full theme doc (for the email/WhatsApp templates)
 let REGISTRATION_OPENS  = null;          // Date — when registration becomes available
 let REGISTRATION_CLOSES = null;          // Date — when registration shuts
+let MAX_CONFIRMED   = null;              // confirmed-runners cap (null = none)
+let CONFIRMED_COUNT = 0;                 // maintained by the admin dashboard
 
 // ============================================================
-// Registration period
+// Registration period + capacity
 // ============================================================
 function registrationStatus(now = new Date()) {
   if (REGISTRATION_OPENS  && now <  REGISTRATION_OPENS)  return "before";
   if (REGISTRATION_CLOSES && now >= REGISTRATION_CLOSES) return "after";
+  // The race filled up before the window closed. The count here can be up
+  // to one cache-TTL stale (~10 min) — the Firestore rules enforce the cap
+  // exactly at submit time; this just shows the right page.
+  if (MAX_CONFIRMED != null && CONFIRMED_COUNT >= MAX_CONFIRMED) return "full";
   return "open";
 }
 function fmtDate(d) {
@@ -1657,6 +1663,9 @@ function renderRegistrationBanner() {
   if (status === "before") {
     closedBanner.innerHTML =
       `Registration opens on <strong>${fmtDate(REGISTRATION_OPENS)}</strong>. Come back then to sign up.`;
+  } else if (status === "full") {
+    closedBanner.textContent =
+      `${COMPETITION_NAME} is FULL — all ${MAX_CONFIRMED} spots are taken and registration is closed. See you next year!`;
   } else {
     closedBanner.textContent =
       `Registration for ${COMPETITION_NAME} is now closed. See you next year!`;
@@ -2861,7 +2870,9 @@ async function fetchConfigData() {
                    : (c.year ? "BTN-" + c.year : null),
       name: (typeof c.name === "string" && c.name.trim())
               ? c.name.trim() + (c.year && !c.name.includes(String(c.year)) ? " " + c.year : "")
-              : null
+              : null,
+      maxConfirmed:   (typeof c.maxConfirmed   === "number") ? c.maxConfirmed   : null,
+      confirmedCount: (typeof c.confirmedCount === "number") ? c.confirmedCount : 0
     };
   }
   // Categories — supports new schema (cat.price) and legacy (cat.prices.wave1)
@@ -2906,6 +2917,8 @@ function applyConfigData(data) {
   if (c.registrationOpens)  REGISTRATION_OPENS  = new Date(c.registrationOpens);
   if (c.registrationCloses) REGISTRATION_CLOSES = new Date(c.registrationCloses);
   if (c.raceDay)            RACE_DAY = c.raceDay;
+  MAX_CONFIRMED   = (typeof c.maxConfirmed   === "number") ? c.maxConfirmed   : null;
+  CONFIRMED_COUNT = (typeof c.confirmedCount === "number") ? c.confirmedCount : 0;
   if (c.name) {
     COMPETITION_NAME = c.name;
     document.title = "Register — " + c.name;
@@ -3313,7 +3326,19 @@ form.addEventListener("submit", async (e) => {
     console.error(err);
     let msg;
     if (err?.code === "permission-denied") {
-      msg = "We couldn't save your registration — one of the required fields may be invalid, " +
+      // Fresh check: did the race fill up while this form was open? The
+      // rules enforce the cap exactly; the cached page can lag behind it.
+      try {
+        const cs = await getDoc(doc(db, "competitions", COMPETITION_ID));
+        const c = cs.exists() ? cs.data() : {};
+        if (typeof c.maxConfirmed === "number" && (Number(c.confirmedCount) || 0) >= c.maxConfirmed) {
+          MAX_CONFIRMED = c.maxConfirmed;
+          CONFIRMED_COUNT = Number(c.confirmedCount) || 0;
+          renderRegistrationBanner();
+          msg = `${COMPETITION_NAME} is full — all ${c.maxConfirmed} spots are taken, so your registration could not be saved. Sorry, and see you next year!`;
+        }
+      } catch (_) {}
+      if (!msg) msg = "We couldn't save your registration — one of the required fields may be invalid, " +
             "or registration is closed. Please double-check your details, or contact batrounrace@gmail.com.";
     } else {
       msg = "Sorry, something went wrong submitting your registration. Please try again or contact batrounrace@gmail.com" + (err?.message ? ("\n\nDetails: " + err.message) : "");

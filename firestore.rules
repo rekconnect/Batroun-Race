@@ -83,15 +83,21 @@ service cloud.firestore {
     function registrationOpen(competitionId) {
       // Allow registration when:
       //   - the competition doc doesn't exist yet, OR
-      //   - we are inside the [registrationOpens, registrationCloses) window.
-      // Either bound being null means "no limit on that side".
+      //   - we are inside the [registrationOpens, registrationCloses) window
+      //     AND the confirmed-runners cap (maxConfirmed, null = no cap) has
+      //     not been reached. confirmedCount is maintained by the admin
+      //     dashboard (confirm/revert hooks + per-session sweep).
+      // Either time bound being null means "no limit on that side".
       let compPath = /databases/$(database)/documents/competitions/$(competitionId);
       let opens  = get(compPath).data.get('registrationOpens',  null);
       let closes = get(compPath).data.get('registrationCloses', null);
+      let cap    = get(compPath).data.get('maxConfirmed', null);
+      let cnt    = get(compPath).data.get('confirmedCount', 0);
       return !exists(compPath)
           || (
               (opens  == null || request.time >= opens)
            && (closes == null || request.time <  closes)
+           && (cap == null || cnt < cap)
           );
     }
 

@@ -83,6 +83,8 @@ competitions/_app                               // multi-event registry (public 
 competitions/{competitionId}                    // "batroun-race-2026"
   ├─ name, year, registrationOpens, registrationCloses, raceDay, raceStartTime, raceLocation
   ├─ refPrefix                                  // Whish ref prefix, e.g. "BTN-2026" — editable in admin Competition tab; blank → BTN-<year>
+  ├─ maxConfirmed                               // confirmed-runners cap (null = none) — public registration auto-closes ("race is full") at this count; enforced by rules registrationOpen() too
+  ├─ confirmedCount                             // live count of confirmed (paid+free, not deleted) — confirm tx +1, revert -1, admin-session sweep re-derives (syncConfirmedCount)
 
 competitions/{competitionId}/categories/{categoryId}
   ├─ name, distanceKm, timed
