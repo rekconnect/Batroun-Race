@@ -1312,7 +1312,16 @@ See you at the start line!"></textarea>
               Blank = <code>BTN-&lt;year&gt;</code>.
             </p>
           </div>
-          <div></div>
+          <div>
+            <label>Confirmed-runners cap</label>
+            <input id="cpMaxConfirmed" type="number" min="1" placeholder="e.g. 200">
+            <p class="muted" style="font-size:.8rem;margin:6px 0 0">
+              Public registration closes automatically ("race is full") once
+              this many runners are CONFIRMED (paid + free). Blank = no cap.
+              Admins can always keep confirming past it.
+              <span id="cpConfirmedNow"></span>
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1596,7 +1605,7 @@ import {
 import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, writeBatch,
-  onSnapshot, query, orderBy, serverTimestamp, runTransaction, arrayUnion
+  onSnapshot, query, orderBy, serverTimestamp, runTransaction, arrayUnion, increment
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -2057,10 +2066,12 @@ function startListeners() {
     snap => {
       regs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       rerenderAllTables();
-      // Self-heal the scanner's bib→ref index once per session, after the
-      // data settles (covers bibs changed via the editor, restores, hand
-      // edits — anything the confirm/revert hooks didn't see).
+      // Self-heal the scanner's bib→ref index and the confirmed-runners
+      // counter once per session, after the data settles (covers changes
+      // via the editor, restores, hand edits — anything the confirm/revert
+      // hooks didn't see).
       setTimeout(syncBibIndex, 4000);
+      setTimeout(syncConfirmedCount, 4000);
     },
     err => toast("Registrations listener: " + err.message, true)
   );
@@ -2217,6 +2228,28 @@ async function syncBibIndex() {
   } catch (e) {
     console.warn("bib index sync:", e.message);
     bibIndexSynced = false;   // retry on the next snapshot tick
+  }
+}
+
+// Confirmed-runners counter on the competition doc — the public page reads
+// it to auto-close registration at the cap ("race is full"), and the rules
+// enforce it at create time. The confirm/revert hooks adjust it live; this
+// once-per-admin-session sweep re-derives the true count (paid + free,
+// not deleted) and fixes any drift from deletes, restores or hand edits.
+let confirmedCountSynced = false;
+async function syncConfirmedCount() {
+  if (confirmedCountSynced || userRole !== "admin") return;
+  confirmedCountSynced = true;
+  try {
+    const actual = regs.filter(r => !r.deletedAt
+      && (r.paymentStatus === "paid" || r.paymentStatus === "free")).length;
+    if ((Number(competition.confirmedCount) || 0) !== actual) {
+      await updateDoc(doc(db, "competitions", COMPETITION_ID), { confirmedCount: actual });
+      console.info(`confirmed counter corrected → ${actual}`);
+    }
+  } catch (e) {
+    console.warn("confirmed counter sync:", e.message);
+    confirmedCountSynced = false;   // retry on the next snapshot tick
   }
 }
 
@@ -5523,6 +5556,9 @@ async function revertToPending(r) {
       deleteDoc(doc(db, "competitions", COMPETITION_ID, "bibIndex", String(r.bibNumber)))
         .catch(e => console.warn("bib index cleanup:", e.message));
     }
+    // One less confirmed runner (best-effort; the session sweep corrects drift).
+    updateDoc(doc(db, "competitions", COMPETITION_ID), { confirmedCount: increment(-1) })
+      .catch(e => console.warn("confirmed counter:", e.message));
     toast(`${name} moved back to Registrations (pending)`);
   } catch (e) {
     console.error(e);
@@ -6203,6 +6239,12 @@ function openConfirmPay(r) {
         // bib with plain get-by-id reads (they have no query permission).
         tx.set(doc(db, "competitions", COMPETITION_ID, "bibIndex", String(bib)),
                { ref: r.id, updatedAt: serverTimestamp() });
+        // Confirmed-runners counter (drives the public "race is full"
+        // auto-close). Only a pending→confirmed transition counts — a free
+        // entry getting its bib was already in the confirmed set.
+        if (reg.paymentStatus === "pending") {
+          tx.update(doc(db, "competitions", COMPETITION_ID), { confirmedCount: increment(1) });
+        }
         return bib;
       });
       closeModal();
@@ -8019,7 +8061,7 @@ $("#themeSaveBtn").addEventListener("click", async () => {
 let competitionDirty = false;
 
 function markCompetitionDirty() { competitionDirty = true; }
-["cpName","cpYear","cpOpens","cpCloses","cpRaceDay","cpStartTime","cpLocation","cpMapUrl","cpRefPrefix"].forEach(id => {
+["cpName","cpYear","cpOpens","cpCloses","cpRaceDay","cpStartTime","cpLocation","cpMapUrl","cpRefPrefix","cpMaxConfirmed"].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener("input", markCompetitionDirty);
 });
@@ -8043,6 +8085,10 @@ function loadCompetitionIntoEditor(c) {
   $("#cpLocation").value = c.raceLocation || "";
   $("#cpMapUrl").value = c.raceLocationMapUrl || "";
   $("#cpRefPrefix").value = c.refPrefix || "";
+  $("#cpMaxConfirmed").value = (typeof c.maxConfirmed === "number") ? c.maxConfirmed : "";
+  const nowEl = $("#cpConfirmedNow");
+  if (nowEl) nowEl.textContent =
+    ` Currently confirmed: ${regs.filter(r => !r.deletedAt && (r.paymentStatus === "paid" || r.paymentStatus === "free")).length}.`;
 }
 
 // Theme-tab samples that display the CURRENT event: the ticket preview's
@@ -8090,7 +8136,8 @@ $("#competitionSaveBtn").addEventListener("click", async () => {
       const u = $("#cpMapUrl").value.trim();
       return /^https?:\/\//i.test(u) ? u : null;
     })(),
-    refPrefix: $("#cpRefPrefix").value.trim().replace(/-+$/, "") || null
+    refPrefix: $("#cpRefPrefix").value.trim().replace(/-+$/, "") || null,
+    maxConfirmed: parseInt($("#cpMaxConfirmed").value, 10) || null
   };
 
   console.log("[competition] saving:", {
